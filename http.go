@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -47,7 +48,7 @@ func (s *HTTPServer) authenticate(req *http.Request) (int, error) {
 		return http.StatusUnauthorized, fmt.Errorf("username and password not matching")
 	}
 
-	return http.StatusProxyAuthRequired, fmt.Errorf(http.StatusText(http.StatusProxyAuthRequired))
+	return http.StatusProxyAuthRequired, errors.New(http.StatusText(http.StatusProxyAuthRequired))
 }
 
 func (s *HTTPServer) handleConn(req *http.Request, conn net.Conn) (peer net.Conn, err error) {
