@@ -15,7 +15,7 @@ import (
 
 	"github.com/akamensky/argparse"
 	"github.com/amnezia-vpn/amneziawg-go/device"
-	"github.com/pufferffish/wireproxy"
+	wireproxyawg "github.com/artem-russkikh/wireproxy-awg"
 	"suah.dev/protect"
 )
 
@@ -130,7 +130,7 @@ func extractPort(addr string) uint16 {
 	return uint16(port)
 }
 
-func lockNetwork(sections []wireproxy.RoutineSpawner, infoAddr *string) {
+func lockNetwork(sections []wireproxyawg.RoutineSpawner, infoAddr *string) {
 	var rules []landlock.Rule
 	if infoAddr != nil && *infoAddr != "" {
 		rules = append(rules, landlock.BindTCP(extractPort(*infoAddr)))
@@ -138,13 +138,13 @@ func lockNetwork(sections []wireproxy.RoutineSpawner, infoAddr *string) {
 
 	for _, section := range sections {
 		switch section := section.(type) {
-		case *wireproxy.TCPServerTunnelConfig:
+		case *wireproxyawg.TCPServerTunnelConfig:
 			rules = append(rules, landlock.ConnectTCP(extractPort(section.Target)))
-		case *wireproxy.HTTPConfig:
+		case *wireproxyawg.HTTPConfig:
 			rules = append(rules, landlock.BindTCP(extractPort(section.BindAddress)))
-		case *wireproxy.TCPClientTunnelConfig:
+		case *wireproxyawg.TCPClientTunnelConfig:
 			rules = append(rules, landlock.ConnectTCP(uint16(section.BindAddress.Port)))
-		case *wireproxy.Socks5Config:
+		case *wireproxyawg.Socks5Config:
 			rules = append(rules, landlock.BindTCP(extractPort(section.BindAddress)))
 		}
 	}
@@ -205,7 +205,7 @@ func main() {
 		lock("read-config")
 	}
 
-	conf, err := wireproxy.ParseConfig(*config)
+	conf, err := wireproxyawg.ParseConfig(*config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func main() {
 
 	lock("ready")
 
-	tun, err := wireproxy.StartWireguard(conf.Device, logLevel)
+	tun, err := wireproxyawg.StartWireguard(conf.Device, logLevel)
 	if err != nil {
 		log.Fatal(err)
 	}

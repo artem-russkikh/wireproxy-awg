@@ -3,7 +3,7 @@
 [![Build status](https://github.com/octeep/wireproxy/actions/workflows/build.yml/badge.svg)](https://github.com/octeep/wireproxy/actions)
 [![Documentation](https://img.shields.io/badge/godoc-wireproxy-blue)](https://pkg.go.dev/github.com/octeep/wireproxy)
 
-AmneziaWG compatible wireguard client that exposes itself as a socks5/http proxy or tunnels.
+AmneziaWG compatible wireguard client that exposes itself as a socks5/http proxy or tunnels. Forked from [wireproxy](https://github.com/pufferffish/wireproxy)
 
 # What is this
 `wireproxy` is a completely userspace application that connects to a wireguard peer,

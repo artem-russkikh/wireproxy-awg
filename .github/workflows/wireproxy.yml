@@ -24,13 +24,13 @@ jobs:
 
       - name: Git clone WireProxy
         run: |
-          git clone https://github.com/pufferffish/wireproxy.git ${{ env.workdir }}
+          git clone https://github.com/artem-russkikh/wireproxy-awg.git ${{ env.workdir }}
           cp ./.github/wireproxy-releaser.yml ${{ env.workdir }}/.goreleaser.yml
 
       - name: Set up GoReleaser
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.23"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v5

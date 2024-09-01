@@ -1,8 +1,6 @@
-module github.com/pufferffish/wireproxy
+module github.com/artem-russkikh/wireproxy-awg
 
-go 1.21.1
-
-toolchain go1.21.6
+go 1.23
 
 require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
