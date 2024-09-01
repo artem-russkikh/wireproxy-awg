@@ -420,7 +420,49 @@ func ParseASecConfig(section *ini.Section) (*ASecConfigType, error) {
 		aSecConfig.transportPacketMagicHeader = uint32(value)
 	}
 
+	if err := ValidateASecConfig(aSecConfig); err != nil {
+		return nil, err
+	}
+
 	return aSecConfig, nil
+}
+
+func ValidateASecConfig(config *ASecConfigType) error {
+	if config == nil {
+		return nil
+	}
+	jc := config.junkPacketCount
+	jmin := config.junkPacketMinSize
+	jmax := config.junkPacketMaxSize
+	if jc < 1 || jc > 128 {
+		return errors.New("value of the Jc field must be within the range of 1 to 128")
+	}
+	if jmin > jmax {
+		return errors.New("value of the Jmin field must be less than or equal to Jmax field value")
+	}
+	if jmax > 1280 {
+		return errors.New("value of the Jmax field must be less than or equal 1280")
+	}
+
+	s1 := config.initPacketJunkSize
+	s2 := config.responsePacketJunkSize
+	const messageInitiationSize = 148
+	const messageResponseSize = 92
+	if messageInitiationSize+s1 == messageResponseSize+s2 {
+		return errors.New(
+			"value of the field S1 + message initiation size (148) must not equal S2 + message response size (92)",
+		)
+	}
+
+	h1 := config.initPacketMagicHeader
+	h2 := config.responsePacketMagicHeader
+	h3 := config.underloadPacketMagicHeader
+	h4 := config.transportPacketMagicHeader
+	if (h1 == h2) || (h1 == h3) || (h1 == h4) || (h2 == h3) || (h2 == h4) || (h3 == h4) {
+		return errors.New("values of the H1-H4 fields must be unique")
+	}
+
+	return nil
 }
 
 // ParsePeers parses the [Peer] section and extract the information into `peers`
