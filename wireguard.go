@@ -7,9 +7,9 @@ import (
 	"net/netip"
 
 	"github.com/MakeNowJust/heredoc/v2"
-	"golang.zx2c4.com/wireguard/conn"
-	"golang.zx2c4.com/wireguard/device"
-	"golang.zx2c4.com/wireguard/tun/netstack"
+	"github.com/amnezia-vpn/amneziawg-go/conn"
+	"github.com/amnezia-vpn/amneziawg-go/device"
+	"github.com/amnezia-vpn/amneziawg-go/tun/netstack"
 )
 
 // DeviceSetting contains the parameters for setting up a tun interface
@@ -28,6 +28,27 @@ func CreateIPCRequest(conf *DeviceConfig) (*DeviceSetting, error) {
 
 	if conf.ListenPort != nil {
 		request.WriteString(fmt.Sprintf("listen_port=%d\n", *conf.ListenPort))
+	}
+
+	if conf.ASecConfig != nil {
+		aSecConfig := conf.ASecConfig
+		request.WriteString(fmt.Sprintf(heredoc.Doc(`
+				jc=%d
+				jmin=%d
+				jmax=%d
+				s1=%d
+				s2=%d
+				h1=%d
+				h2=%d
+				h3=%d
+				h4=%d
+			`),
+			aSecConfig.junkPacketCount,
+			aSecConfig.junkPacketMinSize, aSecConfig.junkPacketMaxSize,
+			aSecConfig.initPacketJunkSize, aSecConfig.responsePacketJunkSize,
+			aSecConfig.initPacketMagicHeader, aSecConfig.responsePacketMagicHeader,
+			aSecConfig.underloadPacketMagicHeader, aSecConfig.transportPacketMagicHeader,
+		))
 	}
 
 	for _, peer := range conf.Peers {

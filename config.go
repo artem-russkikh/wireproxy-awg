@@ -21,6 +21,18 @@ type PeerConfig struct {
 	AllowedIPs   []netip.Prefix
 }
 
+type ASecConfigType struct {
+	junkPacketCount            int    // Jc
+	junkPacketMinSize          int    // Jmin
+	junkPacketMaxSize          int    // Jmax
+	initPacketJunkSize         int    // s1
+	responsePacketJunkSize     int    // s2
+	initPacketMagicHeader      uint32 // h1
+	responsePacketMagicHeader  uint32 // h2
+	underloadPacketMagicHeader uint32 // h3
+	transportPacketMagicHeader uint32 // h4
+}
+
 // DeviceConfig contains the information to initiate a wireguard connection
 type DeviceConfig struct {
 	SecretKey          string
@@ -31,6 +43,7 @@ type DeviceConfig struct {
 	ListenPort         *int
 	CheckAlive         []netip.Addr
 	CheckAliveInterval int
+	ASecConfig         *ASecConfigType
 }
 
 type TCPClientTunnelConfig struct {
@@ -296,7 +309,118 @@ func ParseInterface(cfg *ini.File, device *DeviceConfig) error {
 		device.CheckAliveInterval = value
 	}
 
+	aSecConfig, err := ParseASecConfig(section)
+	if err != nil {
+		return err
+	}
+	device.ASecConfig = aSecConfig
+
 	return nil
+}
+
+func ParseASecConfig(section *ini.Section) (*ASecConfigType, error) {
+	var aSecConfig *ASecConfigType
+
+	if sectionKey, err := section.GetKey("Jc"); err == nil {
+		value, err := sectionKey.Int()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.junkPacketCount = value
+	}
+
+	if sectionKey, err := section.GetKey("Jmin"); err == nil {
+		value, err := sectionKey.Int()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.junkPacketMinSize = value
+	}
+
+	if sectionKey, err := section.GetKey("Jmax"); err == nil {
+		value, err := sectionKey.Int()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.junkPacketMaxSize = value
+	}
+
+	if sectionKey, err := section.GetKey("S1"); err == nil {
+		value, err := sectionKey.Int()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.initPacketJunkSize = value
+	}
+
+	if sectionKey, err := section.GetKey("S2"); err == nil {
+		value, err := sectionKey.Int()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.responsePacketJunkSize = value
+	}
+
+	if sectionKey, err := section.GetKey("H1"); err == nil {
+		value, err := sectionKey.Uint()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.initPacketMagicHeader = uint32(value)
+	}
+
+	if sectionKey, err := section.GetKey("H2"); err == nil {
+		value, err := sectionKey.Uint()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.responsePacketMagicHeader = uint32(value)
+	}
+
+	if sectionKey, err := section.GetKey("H3"); err == nil {
+		value, err := sectionKey.Uint()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.underloadPacketMagicHeader = uint32(value)
+	}
+
+	if sectionKey, err := section.GetKey("H4"); err == nil {
+		value, err := sectionKey.Uint()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.transportPacketMagicHeader = uint32(value)
+	}
+
+	return aSecConfig, nil
 }
 
 // ParsePeers parses the [Peer] section and extract the information into `peers`
