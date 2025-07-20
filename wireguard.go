@@ -3,6 +3,7 @@ package wireproxy
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"net/netip"
 
@@ -32,23 +33,48 @@ func CreateIPCRequest(conf *DeviceConfig) (*DeviceSetting, error) {
 
 	if conf.ASecConfig != nil {
 		aSecConfig := conf.ASecConfig
-		request.WriteString(fmt.Sprintf(heredoc.Doc(`
-				jc=%d
-				jmin=%d
-				jmax=%d
-				s1=%d
-				s2=%d
-				h1=%d
-				h2=%d
-				h3=%d
-				h4=%d
-			`),
-			aSecConfig.junkPacketCount,
-			aSecConfig.junkPacketMinSize, aSecConfig.junkPacketMaxSize,
-			aSecConfig.initPacketJunkSize, aSecConfig.responsePacketJunkSize,
-			aSecConfig.initPacketMagicHeader, aSecConfig.responsePacketMagicHeader,
-			aSecConfig.underloadPacketMagicHeader, aSecConfig.transportPacketMagicHeader,
-		))
+
+		var aSecBuilder strings.Builder
+
+		aSecBuilder.WriteString(fmt.Sprintf("jc=%d\n", aSecConfig.junkPacketCount))
+		aSecBuilder.WriteString(fmt.Sprintf("jmin=%d\n", aSecConfig.junkPacketMinSize))
+		aSecBuilder.WriteString(fmt.Sprintf("jmax=%d\n", aSecConfig.junkPacketMaxSize))
+		aSecBuilder.WriteString(fmt.Sprintf("s1=%d\n", aSecConfig.initPacketJunkSize))
+		aSecBuilder.WriteString(fmt.Sprintf("s2=%d\n", aSecConfig.responsePacketJunkSize))
+		aSecBuilder.WriteString(fmt.Sprintf("h1=%d\n", aSecConfig.initPacketMagicHeader))
+		aSecBuilder.WriteString(fmt.Sprintf("h2=%d\n", aSecConfig.responsePacketMagicHeader))
+		aSecBuilder.WriteString(fmt.Sprintf("h3=%d\n", aSecConfig.underloadPacketMagicHeader))
+		aSecBuilder.WriteString(fmt.Sprintf("h4=%d\n", aSecConfig.transportPacketMagicHeader))
+
+		if aSecConfig.i1 != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("i1=%s\n", *aSecConfig.i1))
+		}
+		if aSecConfig.i2 != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("i2=%s\n", *aSecConfig.i2))
+		}
+		if aSecConfig.i3 != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("i3=%s\n", *aSecConfig.i3))
+		}
+		if aSecConfig.i4 != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("i4=%s\n", *aSecConfig.i4))
+		}
+		if aSecConfig.i5 != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("i5=%s\n", *aSecConfig.i5))
+		}
+		if aSecConfig.j1 != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("j1=%s\n", *aSecConfig.j1))
+		}
+		if aSecConfig.j2 != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("j2=%s\n", *aSecConfig.j2))
+		}
+		if aSecConfig.j3 != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("j3=%s\n", *aSecConfig.j3))
+		}
+		if aSecConfig.itime != nil {
+			aSecBuilder.WriteString(fmt.Sprintf("itime=%d\n", *aSecConfig.itime))
+		}
+
+		request.WriteString(aSecBuilder.String())
 	}
 
 	for _, peer := range conf.Peers {

@@ -31,6 +31,15 @@ type ASecConfigType struct {
 	responsePacketMagicHeader  uint32 // h2
 	underloadPacketMagicHeader uint32 // h3
 	transportPacketMagicHeader uint32 // h4
+	i1                         *string
+	i2                         *string
+	i3                         *string
+	i4                         *string
+	i5                         *string
+	j1                         *string
+	j2                         *string
+	j3                         *string
+	itime                      *int
 }
 
 // DeviceConfig contains the information to initiate a wireguard connection
@@ -188,7 +197,7 @@ func parseCIDRNetIP(section *ini.Section, keyName string) ([]netip.Addr, error) 
 		if len(str) == 0 {
 			continue
 		}
-    
+
 		if addr, err := netip.ParseAddr(str); err == nil {
 			ips = append(ips, addr)
 		} else {
@@ -196,7 +205,7 @@ func parseCIDRNetIP(section *ini.Section, keyName string) ([]netip.Addr, error) 
 			if err != nil {
 				return nil, err
 			}
-      
+
 			addr := prefix.Addr()
 			ips = append(ips, addr)
 		}
@@ -418,6 +427,81 @@ func ParseASecConfig(section *ini.Section) (*ASecConfigType, error) {
 			aSecConfig = &ASecConfigType{}
 		}
 		aSecConfig.transportPacketMagicHeader = uint32(value)
+	}
+
+	if sectionKey, err := section.GetKey("I1"); err == nil {
+		value := sectionKey.String()
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.i1 = &value
+	}
+
+	if sectionKey, err := section.GetKey("I2"); err == nil {
+		value := sectionKey.String()
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.i2 = &value
+	}
+
+	if sectionKey, err := section.GetKey("I3"); err == nil {
+		value := sectionKey.String()
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.i3 = &value
+	}
+
+	if sectionKey, err := section.GetKey("I4"); err == nil {
+		value := sectionKey.String()
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.i4 = &value
+	}
+
+	if sectionKey, err := section.GetKey("I5"); err == nil {
+		value := sectionKey.String()
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.i5 = &value
+	}
+
+	if sectionKey, err := section.GetKey("J1"); err == nil {
+		value := sectionKey.String()
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.j1 = &value
+	}
+
+	if sectionKey, err := section.GetKey("J2"); err == nil {
+		value := sectionKey.String()
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.j2 = &value
+	}
+
+	if sectionKey, err := section.GetKey("J3"); err == nil {
+		value := sectionKey.String()
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.j3 = &value
+	}
+
+	if sectionKey, err := section.GetKey("ITime"); err == nil {
+		value, err := sectionKey.Int()
+		if err != nil {
+			return nil, err
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.itime = &value
 	}
 
 	if err := ValidateASecConfig(aSecConfig); err != nil {

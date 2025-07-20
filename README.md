@@ -253,4 +253,4 @@ If nothing is set for `CheckAlive`, an empty JSON object with 200 will be the re
 The peer which the ICMP ping packet is routed to depends on the `AllowedIPs` set for each peers.
 
 # Stargazers over time
-[![Stargazers over time](https://starchart.cc/octeep/wireproxy.svg)](https://starchart.cc/octeep/wireproxy)
+[![Stargazers over time](https://starchart.cc/artem-russkikh/wireproxy-awg.svg)](https://starchart.cc/artem-russkikh/wireproxy-awg)
