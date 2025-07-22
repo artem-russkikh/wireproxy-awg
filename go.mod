@@ -10,7 +10,6 @@ require (
 	github.com/amnezia-vpn/amneziawg-go v0.2.13
 	github.com/go-ini/ini v1.67.0
 	github.com/landlock-lsm/go-landlock v0.0.0-20240715193425-db0c8d6f1dff
-	github.com/sourcegraph/conc v0.3.0
 	github.com/things-go/go-socks5 v0.0.5
 	golang.org/x/net v0.42.0
 	suah.dev/protect v1.2.4

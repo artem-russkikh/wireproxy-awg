@@ -21,9 +21,9 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/sourcegraph/conc"
 	"github.com/things-go/go-socks5"
 	"github.com/things-go/go-socks5/bufferpool"
 
@@ -48,7 +48,8 @@ type VirtualTun struct {
 	SystemDNS bool
 	Conf      *DeviceConfig
 	// PingRecord stores the last time an IP was pinged
-	PingRecord map[string]uint64
+	PingRecord     map[string]uint64
+	PingRecordLock *sync.Mutex
 }
 
 // RoutineSpawner spawns a routine (e.g. socks5, tcp static routes) after the configuration is parsed
@@ -188,6 +189,9 @@ func (c CredentialValidator) Valid(username, password string) bool {
 
 // connForward copy data from `from` to `to`
 func connForward(from io.ReadWriteCloser, to io.ReadWriteCloser) {
+	defer from.Close()
+	defer to.Close()
+
 	_, err := io.Copy(to, from)
 	if err != nil {
 		errorLogger.Printf("Cannot forward traffic: %s\n", err.Error())
@@ -210,20 +214,8 @@ func tcpClientForward(vt *VirtualTun, raddr *addressPort, conn net.Conn) {
 		return
 	}
 
-	go func() {
-		wg := conc.NewWaitGroup()
-		wg.Go(func() {
-			connForward(sconn, conn)
-		})
-		wg.Go(func() {
-			connForward(conn, sconn)
-		})
-		wg.Wait()
-		_ = sconn.Close()
-		_ = conn.Close()
-		sconn = nil
-		conn = nil
-	}()
+	go connForward(sconn, conn)
+	go connForward(conn, sconn)
 }
 
 // STDIOTcpForward starts a new connection via wireguard and forward traffic from `conn`
@@ -248,18 +240,8 @@ func STDIOTcpForward(vt *VirtualTun, raddr *addressPort) {
 		return
 	}
 
-	go func() {
-		wg := conc.NewWaitGroup()
-		wg.Go(func() {
-			connForward(os.Stdin, sconn)
-		})
-		wg.Go(func() {
-			connForward(sconn, stdout)
-		})
-		wg.Wait()
-		_ = sconn.Close()
-		sconn = nil
-	}()
+	go connForward(os.Stdin, sconn)
+	go connForward(sconn, stdout)
 }
 
 // SpawnRoutine spawns a local TCP server which acts as a proxy to the specified target
@@ -309,20 +291,9 @@ func tcpServerForward(vt *VirtualTun, raddr *addressPort, conn net.Conn) {
 		return
 	}
 
-	go func() {
-		gr := conc.NewWaitGroup()
-		gr.Go(func() {
-			connForward(sconn, conn)
-		})
-		gr.Go(func() {
-			connForward(conn, sconn)
-		})
-		gr.Wait()
-		_ = sconn.Close()
-		_ = conn.Close()
-		sconn = nil
-		conn = nil
-	}()
+	go connForward(sconn, conn)
+	go connForward(conn, sconn)
+
 }
 
 // SpawnRoutine spawns a TCP server on wireguard which acts as a proxy to the specified target
@@ -475,7 +446,9 @@ func (d VirtualTun) pingIPs() {
 				}
 			}
 
+			d.PingRecordLock.Lock()
 			d.PingRecord[addr.String()] = uint64(time.Now().Unix())
+			d.PingRecordLock.Unlock()
 
 			defer socket.Close()
 		}()
