@@ -7,7 +7,7 @@ toolchain go1.24.5
 require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
 	github.com/akamensky/argparse v1.4.0
-	github.com/amnezia-vpn/amneziawg-go v0.2.13
+	github.com/amnezia-vpn/amneziawg-go v0.2.16
 	github.com/go-ini/ini v1.67.0
 	github.com/landlock-lsm/go-landlock v0.0.0-20240715193425-db0c8d6f1dff
 	github.com/things-go/go-socks5 v0.0.5
@@ -17,8 +17,6 @@ require (
 
 require (
 	github.com/google/btree v1.1.3 // indirect
-	github.com/tevino/abool v1.2.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/time v0.9.0 // indirect

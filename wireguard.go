@@ -37,15 +37,51 @@ func CreateIPCRequest(conf *DeviceConfig) (*DeviceSetting, error) {
 
 		var aSecBuilder strings.Builder
 
-		aSecBuilder.WriteString(fmt.Sprintf("jc=%d\n", aSecConfig.junkPacketCount))
-		aSecBuilder.WriteString(fmt.Sprintf("jmin=%d\n", aSecConfig.junkPacketMinSize))
-		aSecBuilder.WriteString(fmt.Sprintf("jmax=%d\n", aSecConfig.junkPacketMaxSize))
-		aSecBuilder.WriteString(fmt.Sprintf("s1=%d\n", aSecConfig.initPacketJunkSize))
-		aSecBuilder.WriteString(fmt.Sprintf("s2=%d\n", aSecConfig.responsePacketJunkSize))
-		aSecBuilder.WriteString(fmt.Sprintf("h1=%d\n", aSecConfig.initPacketMagicHeader))
-		aSecBuilder.WriteString(fmt.Sprintf("h2=%d\n", aSecConfig.responsePacketMagicHeader))
-		aSecBuilder.WriteString(fmt.Sprintf("h3=%d\n", aSecConfig.underloadPacketMagicHeader))
-		aSecBuilder.WriteString(fmt.Sprintf("h4=%d\n", aSecConfig.transportPacketMagicHeader))
+		if aSecConfig.hasJunkPacketCount {
+			aSecBuilder.WriteString(fmt.Sprintf("jc=%d\n", aSecConfig.junkPacketCount))
+		}
+		if aSecConfig.hasJunkPacketMinSize {
+			aSecBuilder.WriteString(fmt.Sprintf("jmin=%d\n", aSecConfig.junkPacketMinSize))
+		}
+		if aSecConfig.hasJunkPacketMaxSize {
+			aSecBuilder.WriteString(fmt.Sprintf("jmax=%d\n", aSecConfig.junkPacketMaxSize))
+		}
+		if aSecConfig.hasInitPacketJunkSize {
+			aSecBuilder.WriteString(fmt.Sprintf("s1=%d\n", aSecConfig.initPacketJunkSize))
+		}
+		if aSecConfig.hasResponsePacketJunkSize {
+			aSecBuilder.WriteString(fmt.Sprintf("s2=%d\n", aSecConfig.responsePacketJunkSize))
+		}
+		if aSecConfig.hasCookieReplyPacketJunkSize {
+			aSecBuilder.WriteString(fmt.Sprintf("s3=%d\n", aSecConfig.cookieReplyPacketJunkSize))
+		}
+		if aSecConfig.hasTransportPacketJunkSize {
+			aSecBuilder.WriteString(fmt.Sprintf("s4=%d\n", aSecConfig.transportPacketJunkSize))
+		}
+		if aSecConfig.hasInitPacketMagicHeader {
+			aSecBuilder.WriteString(fmt.Sprintf(
+				"h1=%s\n",
+				formatMagicHeaderInterval(aSecConfig.initPacketMagicHeader, aSecConfig.initPacketMagicHeaderMax),
+			))
+		}
+		if aSecConfig.hasResponsePacketMagicHeader {
+			aSecBuilder.WriteString(fmt.Sprintf(
+				"h2=%s\n",
+				formatMagicHeaderInterval(aSecConfig.responsePacketMagicHeader, aSecConfig.responsePacketMagicHeaderMax),
+			))
+		}
+		if aSecConfig.hasUnderloadPacketMagicHeader {
+			aSecBuilder.WriteString(fmt.Sprintf(
+				"h3=%s\n",
+				formatMagicHeaderInterval(aSecConfig.underloadPacketMagicHeader, aSecConfig.underloadPacketMagicHeaderMax),
+			))
+		}
+		if aSecConfig.hasTransportPacketMagicHeader {
+			aSecBuilder.WriteString(fmt.Sprintf(
+				"h4=%s\n",
+				formatMagicHeaderInterval(aSecConfig.transportPacketMagicHeader, aSecConfig.transportPacketMagicHeaderMax),
+			))
+		}
 
 		if aSecConfig.i1 != nil {
 			aSecBuilder.WriteString(fmt.Sprintf("i1=%s\n", *aSecConfig.i1))
@@ -61,18 +97,6 @@ func CreateIPCRequest(conf *DeviceConfig) (*DeviceSetting, error) {
 		}
 		if aSecConfig.i5 != nil {
 			aSecBuilder.WriteString(fmt.Sprintf("i5=%s\n", *aSecConfig.i5))
-		}
-		if aSecConfig.j1 != nil {
-			aSecBuilder.WriteString(fmt.Sprintf("j1=%s\n", *aSecConfig.j1))
-		}
-		if aSecConfig.j2 != nil {
-			aSecBuilder.WriteString(fmt.Sprintf("j2=%s\n", *aSecConfig.j2))
-		}
-		if aSecConfig.j3 != nil {
-			aSecBuilder.WriteString(fmt.Sprintf("j3=%s\n", *aSecConfig.j3))
-		}
-		if aSecConfig.itime != nil {
-			aSecBuilder.WriteString(fmt.Sprintf("itime=%d\n", *aSecConfig.itime))
 		}
 
 		request.WriteString(aSecBuilder.String())
