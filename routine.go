@@ -158,9 +158,21 @@ func (config *Socks5Config) SpawnRoutine(vt *VirtualTun) {
 
 	server := socks5.NewServer(options...)
 
-	if err := server.ListenAndServe("tcp", config.BindAddress); err != nil {
-		log.Fatal(err)
-	}
+	// Launch TCP SOCKS5 server
+	go func() {
+		log.Printf("SOCKS5 TCP server listening on %s", config.BindAddress)
+		if err := server.ListenAndServe("tcp", config.BindAddress); err != nil {
+			errorLogger.Printf("SOCKS5 TCP server error: %v", err)
+		}
+	}()
+
+	// Launch UDP SOCKS5 server
+	go func() {
+		log.Printf("SOCKS5 UDP server listening on %s", config.BindAddress)
+		if err := StartSocks5UDPServer(config.BindAddress, vt); err != nil {
+			errorLogger.Printf("SOCKS5 UDP server error: %v", err)
+		}
+	}()
 }
 
 // SpawnRoutine spawns a http server.
