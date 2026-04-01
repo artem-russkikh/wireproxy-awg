@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -58,6 +59,42 @@ type HTTPConfig struct {
 	BindAddress string
 	Username    string
 	Password    string
+}
+
+// PACConfig holds the configuration for the built-in gfwlist2pac HTTP server.
+// The server listens on BindAddress and serves a generated PAC file at /proxy.pac.
+//
+// Example config section:
+//
+//	[PAC]
+//	BindAddress = 127.0.0.1:8080
+//	GFWList     = https://cdn.jsdelivr.net/gh/gfwlist/gfwlist/gfwlist.txt
+//	CacheFile   = /var/cache/wireproxy/gfwlist.txt  # optional, recommended with URL
+//	ExtraRules  = /etc/wireproxy/extra_rules.txt     # optional
+//	ProxyOrder  = SOCKS5,SOCKS,DIRECT
+type PACConfig struct {
+	// BindAddress is the local address on which the PAC HTTP server listens,
+	// e.g. "127.0.0.1:8080".
+	BindAddress string
+	// GFWList is either a local file path or an HTTP(S) URL pointing to a
+	// GFWList-compatible file (plain ABP text, optionally base64-encoded).
+	GFWList string
+	// CacheFile is an optional path where a downloaded GFWList is persisted.
+	// On startup the cached file is preferred over re-downloading.
+	// Ignored when GFWList is a local path.
+	CacheFile string
+	// ExtraRules is an optional path to a plain-text file with additional
+	// ABP-format rules that are merged in-memory on top of the base GFWList.
+	// The file is never written to CacheFile.
+	ExtraRules string
+	// ProxyOrder is the ordered list of proxy types for PAC fallback,
+	// e.g. ["SOCKS5", "SOCKS", "DIRECT"].
+	// Recognised values: SOCKS5, SOCKS, PROXY, DIRECT.
+	ProxyOrder []string
+	// Proxy is the PAC proxy directive assembled automatically from ProxyOrder
+	// and the addresses of the proxy sections in the config.
+	// It is populated by ParseConfig and must not be set in the config file.
+	Proxy string
 }
 
 type Configuration struct {
@@ -442,6 +479,114 @@ func parseHTTPConfig(section *ini.Section) (RoutineSpawner, error) {
 	return config, nil
 }
 
+func parsePACConfig(section *ini.Section) (RoutineSpawner, error) {
+	config := &PACConfig{}
+
+	bindAddr, err := parseString(section, "BindAddress")
+	if err != nil {
+		return nil, fmt.Errorf("BindAddress: %w", err)
+	}
+	if bindAddr == "" {
+		return nil, errors.New("BindAddress should not be empty")
+	}
+	if _, _, err := net.SplitHostPort(bindAddr); err != nil {
+		return nil, fmt.Errorf("BindAddress: invalid address %q: %w", bindAddr, err)
+	}
+	config.BindAddress = bindAddr
+
+	gfwlist, err := parseString(section, "GFWList")
+	if err != nil {
+		return nil, fmt.Errorf("GFWList: %w", err)
+	}
+	if gfwlist == "" {
+		return nil, errors.New("GFWList should not be empty")
+	}
+	config.GFWList = gfwlist
+
+	proxyOrderStr, err := parseString(section, "ProxyOrder")
+	if err != nil {
+		return nil, fmt.Errorf("ProxyOrder: %w", err)
+	}
+	if proxyOrderStr == "" {
+		return nil, errors.New("ProxyOrder should not be empty")
+	}
+	validProxyTypes := map[string]bool{
+		"SOCKS5": true,
+		"SOCKS":  true,
+		"PROXY":  true,
+		"DIRECT": true,
+	}
+	for _, t := range strings.Split(proxyOrderStr, ",") {
+		entry := strings.TrimSpace(t)
+		if !validProxyTypes[strings.ToUpper(entry)] {
+			return nil, fmt.Errorf("ProxyOrder: unknown proxy type %q (allowed: SOCKS5, SOCKS, PROXY, DIRECT)", entry)
+		}
+		config.ProxyOrder = append(config.ProxyOrder, entry)
+	}
+
+	// Optional fields — no error on missing/empty
+	config.CacheFile, _ = parseString(section, "CacheFile")
+	config.ExtraRules, _ = parseString(section, "ExtraRules")
+
+	return config, nil
+}
+
+// buildProxyString assembles the PAC proxy directive
+// (e.g. "SOCKS5 127.0.0.1:1088; SOCKS 127.0.0.1:1088; DIRECT")
+// from an ordered list of proxy type names and the BindAddresses of the
+// proxy sections already parsed into spawners.
+//
+// Recognised type names (case-insensitive):
+//   - SOCKS5 → first [Socks5] section's BindAddress
+//   - SOCKS  → first [Socks5] section's BindAddress
+//   - PROXY  → first [HTTP] section's BindAddress
+//   - DIRECT → no address required
+func buildProxyString(order []string, spawners []RoutineSpawner) (string, error) {
+	var socks5Addr, httpAddr string
+	for _, s := range spawners {
+		switch c := s.(type) {
+		case *Socks5Config:
+			if socks5Addr == "" {
+				socks5Addr = c.BindAddress
+			}
+		case *HTTPConfig:
+			if httpAddr == "" {
+				httpAddr = c.BindAddress
+			}
+		}
+	}
+
+	var parts []string
+	for _, raw := range order {
+		switch strings.ToUpper(raw) {
+		case "SOCKS5":
+			if socks5Addr == "" {
+				return "", errors.New("PAC ProxyOrder includes SOCKS5 but no [Socks5] section found")
+			}
+			parts = append(parts, "SOCKS5 "+socks5Addr)
+		case "SOCKS":
+			if socks5Addr == "" {
+				return "", errors.New("PAC ProxyOrder includes SOCKS but no [Socks5] section found")
+			}
+			parts = append(parts, "SOCKS "+socks5Addr)
+		case "PROXY":
+			if httpAddr == "" {
+				return "", errors.New("PAC ProxyOrder includes PROXY but no [HTTP] section found")
+			}
+			parts = append(parts, "PROXY "+httpAddr)
+		case "DIRECT":
+			parts = append(parts, "DIRECT")
+		default:
+			return "", fmt.Errorf("PAC ProxyOrder: unknown proxy type %q", raw)
+		}
+	}
+
+	if len(parts) == 0 {
+		return "", errors.New("PAC ProxyOrder is empty")
+	}
+	return strings.Join(parts, "; "), nil
+}
+
 // Takes a function that parses an individual section into a config, and apply it on all
 // specified sections
 func parseRoutinesConfig(
@@ -529,6 +674,24 @@ func ParseConfig(path string) (*Configuration, error) {
 	err = parseRoutinesConfig(&routinesSpawners, cfg, "http", parseHTTPConfig)
 	if err != nil {
 		return nil, err
+	}
+
+	err = parseRoutinesConfig(&routinesSpawners, cfg, "PAC", parsePACConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the Proxy string for each PAC config from ProxyOrder and the
+	// addresses of the proxy sections already collected in routinesSpawners.
+	for _, spawner := range routinesSpawners {
+		pac, ok := spawner.(*PACConfig)
+		if !ok {
+			continue
+		}
+		pac.Proxy, err = buildProxyString(pac.ProxyOrder, routinesSpawners)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Configuration{

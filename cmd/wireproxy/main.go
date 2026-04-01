@@ -3,15 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/landlock-lsm/go-landlock/landlock"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
 	"syscall"
+
+	"github.com/landlock-lsm/go-landlock/landlock"
 
 	"github.com/akamensky/argparse"
 	"github.com/amnezia-vpn/amneziawg-go/device"
@@ -23,9 +25,9 @@ import (
 const daemonProcess = "daemon-process"
 
 // default paths for wireproxy config file
-var default_config_paths = []string {
-    "/etc/wireproxy/wireproxy.conf",
-    os.Getenv("HOME")+"/.config/wireproxy.conf",
+var default_config_paths = []string{
+	"/etc/wireproxy/wireproxy.conf",
+	os.Getenv("HOME") + "/.config/wireproxy.conf",
 }
 
 var version = "1.0.13-dev"
@@ -59,12 +61,12 @@ func executablePath() string {
 
 // check if default config file paths exist
 func configFilePath() (string, bool) {
-    for _, path := range default_config_paths {
-        if _, err := os.Stat(path); err == nil {
-            return path, true
-        }
-    }
-    return "", false
+	for _, path := range default_config_paths {
+		if _, err := os.Stat(path); err == nil {
+			return path, true
+		}
+	}
+	return "", false
 }
 
 func lock(stage string) {
@@ -130,6 +132,26 @@ func extractPort(addr string) uint16 {
 	return uint16(port)
 }
 
+// gfwlistPort returns the TCP port that must be allowed for a GFWList source.
+// For HTTP(S) URLs it parses the explicit port, falling back to 80/443.
+// Returns 0 for local file paths (no outbound connection needed).
+func gfwlistPort(gfwlist string) uint16 {
+	u, err := url.Parse(gfwlist)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return 0
+	}
+	if portStr := u.Port(); portStr != "" {
+		port, err := strconv.Atoi(portStr)
+		if err == nil {
+			return uint16(port)
+		}
+	}
+	if u.Scheme == "https" {
+		return 443
+	}
+	return 80
+}
+
 func lockNetwork(sections []wireproxyawg.RoutineSpawner, infoAddr *string) {
 	var rules []landlock.Rule
 	if infoAddr != nil && *infoAddr != "" {
@@ -146,6 +168,13 @@ func lockNetwork(sections []wireproxyawg.RoutineSpawner, infoAddr *string) {
 			rules = append(rules, landlock.ConnectTCP(uint16(section.BindAddress.Port)))
 		case *wireproxyawg.Socks5Config:
 			rules = append(rules, landlock.BindTCP(extractPort(section.BindAddress)))
+		case *wireproxyawg.PACConfig:
+			rules = append(rules, landlock.BindTCP(extractPort(section.BindAddress)))
+			// The PAC server downloads GFWList via the host network stack,
+			// so we must allow outbound connections to the relevant port.
+			if port := gfwlistPort(section.GFWList); port != 0 {
+				rules = append(rules, landlock.ConnectTCP(port))
+			}
 		}
 	}
 
@@ -193,12 +222,12 @@ func main() {
 	}
 
 	if *config == "" {
-        if path, config_exist := configFilePath(); config_exist {
-            *config = path
-        } else {
-            fmt.Println("configuration path is required")
-            return
-        }
+		if path, config_exist := configFilePath(); config_exist {
+			*config = path
+		} else {
+			fmt.Println("configuration path is required")
+			return
+		}
 	}
 
 	if !*daemon {

@@ -30,6 +30,7 @@ of wireproxy by [@artem-russkikh](https://github.com/artem-russkikh).
 
 - TCP static routing for client and server
 - SOCKS5/HTTP proxy (currently only CONNECT is supported)
+- PAC (Proxy Auto-Config) server with automatic GFWList fetching
 
 # TODO
 
@@ -210,6 +211,61 @@ PublicKey = YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY=
 AllowedIPs = 10.254.254.100/32
 # Note there is no Endpoint defined here.
 ```
+
+# PAC server (Proxy Auto-Config)
+
+wireproxy can serve a PAC file generated from a [GFWList](https://github.com/gfwlist/gfwlist)-compatible source.
+Browsers and operating systems that support PAC will automatically route only matching traffic through the proxy.
+
+The PAC server runs on the **host** network stack (not through the VPN tunnel), so it can fetch remote GFWList URLs even before the tunnel is established.
+
+### `[PAC]` configuration fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `BindAddress` | ✅ | Local address on which the PAC HTTP server listens, e.g. `127.0.0.1:8080` |
+| `GFWList` | ✅ | Local file path **or** HTTP(S) URL to a GFWList-compatible file (plain ABP text or base64-encoded) |
+| `ProxyOrder` | ✅ | Comma-separated list of proxy types for PAC fallback, e.g. `SOCKS5,SOCKS,DIRECT`. Allowed values: `SOCKS5`, `SOCKS`, `PROXY`, `DIRECT` |
+| `CacheFile` | — | Path where a downloaded GFWList is persisted. On startup the cached file is preferred over re-downloading. Ignored for local file paths. |
+| `ExtraRules` | — | Path to a plain-text file with additional ABP-format rules merged on top of the base GFWList. Never written to `CacheFile`. |
+
+The PAC file is served at `http://<BindAddress>/proxy.pac` (root `/` redirects there for convenience).  
+When `GFWList` is a URL, the list is **automatically refreshed every 24 hours**.
+
+### Example
+
+```ini
+[Interface]
+Address = 10.200.200.2/32
+PrivateKey = <key>
+DNS = 10.200.200.1
+
+[Peer]
+PublicKey = <key>
+Endpoint = vpn.example.com:51820
+
+# SOCKS5 proxy routed through the VPN tunnel
+[Socks5]
+BindAddress = 127.0.0.1:1080
+
+# PAC server — browsers point to http://127.0.0.1:8080/proxy.pac
+[PAC]
+BindAddress  = 127.0.0.1:8080
+GFWList      = https://cdn.jsdelivr.net/gh/gfwlist/gfwlist/gfwlist.txt
+CacheFile    = /var/cache/wireproxy/gfwlist.txt
+ExtraRules   = /etc/wireproxy/extra_rules.txt
+ProxyOrder   = SOCKS5,SOCKS,DIRECT
+```
+
+Configure your browser / system to use the PAC URL:
+
+```
+http://127.0.0.1:8080/proxy.pac
+```
+
+> **Note:** `ProxyOrder` entries `SOCKS5` and `SOCKS` automatically pick up the `BindAddress`
+> of the first `[Socks5]` section; `PROXY` picks up the first `[http]` section.
+> `DIRECT` requires no associated section.
 
 # Health endpoint
 
