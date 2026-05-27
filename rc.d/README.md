@@ -11,10 +11,10 @@ The provided systemd unit assumes you have the wireproxy executable installed on
 2. If necessary, customize the unit.
    Edit the parts with `procname`, `command`, `wireproxy_conf`  to point to the executable and the configuration file.
 
-4. Add the following lines to `/etc/rc.conf` to enable wireproxy
+4. Add the following lines to `/etc/rc.conf` to enable wireproxy-awg
    `wireproxy_enable="YES"`
 
-5. Start wireproxy service and check status
+5. Start wireproxy-awg service and check status
    ```
    sudo service wireproxy-awg start
    sudo service wireproxy-awg status

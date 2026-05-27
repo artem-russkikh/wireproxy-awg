@@ -2,9 +2,9 @@ name: Cross compile WireProxy
 
 on:
   workflow_dispatch:
-  create:
-     tags:
-       - v*
+  push:
+    tags:
+      - "v*"
 
 jobs:
   WireProxy:
@@ -30,7 +30,7 @@ jobs:
       - name: Set up GoReleaser
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.26"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v5

@@ -2,9 +2,9 @@
 
 [![ISC licensed](https://img.shields.io/badge/license-ISC-blue)](./LICENSE)
 [![Build status](https://github.com/artem-russkikh/wireproxy-awg/actions/workflows/build.yml/badge.svg)](https://github.com/artem-russkikh/wireproxy-awg/actions)
-[![Documentation](https://img.shields.io/badge/godoc-wireproxy-blue)](https://pkg.go.dev/github.com/artem-russkikh/wireproxy-awg)
+[![Documentation](https://img.shields.io/badge/godoc-wireproxy--awg-blue)](https://pkg.go.dev/github.com/artem-russkikh/wireproxy-awg)
 
-AmneziaWG compatible wireguard client that exposes itself as a socks5/http proxy or tunnels. Forked from [wireproxy](https://github.com/pufferffish/wireproxy)
+AmneziaWG compatible wireguard client that exposes itself as a socks5/http proxy or tunnels. Forked from [wireproxy](https://github.com/windtf/wireproxy)
 
 # What is this
 
@@ -74,7 +74,7 @@ make
 # Install
 
 ```bash
-go install github.com/artem-russkikh/wireproxy-awg/cmd/wireproxy@v1.0.13 # or @latest
+go install github.com/artem-russkikh/wireproxy-awg/cmd/wireproxy@v1.0.15 # or @latest
 ```
 
 # Use with VPN
@@ -146,6 +146,10 @@ BindAddress = 127.0.0.1:25345
 #Username = ...
 # Avoid using spaces in the password field
 #Password = ...
+
+# Specifying certificate and key enables HTTPS
+#CertFile = ...
+#KeyFile = ...
 ```
 
 Alternatively, if you already have a wireguard config, you can import it in the
@@ -197,6 +201,18 @@ Target = service-two.servicenet:5001
 [TCPServerTunnel]
 ListenPort = 5080
 Target = service-three.servicenet:80
+
+[UDPProxyTunnel]
+BindAddress = 127.0.0.1:53
+Target = 1.1.1.1:53
+InactivityTimeout = 30 # If its set to 0, it will never timeout
+
+[Resolve]
+# Set DNS Resovle Strategy
+# `ipv4`: Prioritize A records.
+# `ipv6`: Prioritize AAAA records       .
+# `auto` (Default): If the WireGuard interface has IPv4 address only, it's equivalent to `ipv4`, otherwise it's equivalent to `ipv6`.
+ResolveStrategy = auto 
 ```
 
 Wireproxy can also allow peers to connect to it:
@@ -334,4 +350,5 @@ If nothing is set for `CheckAlive`, an empty JSON object with 200 will be the re
 The peer which the ICMP ping packet is routed to depends on the `AllowedIPs` set for each peers.
 
 # Stargazers over time
+
 [![Stargazers over time](https://starchart.cc/artem-russkikh/wireproxy-awg.svg)](https://starchart.cc/artem-russkikh/wireproxy-awg)

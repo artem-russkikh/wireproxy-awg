@@ -35,6 +35,12 @@ type DeviceConfig struct {
 	ASecConfig         *ASecConfigType
 }
 
+type UDPProxyTunnelConfig struct {
+	BindAddress       string
+	Target            string
+	InactivityTimeout int
+}
+
 type TCPClientTunnelConfig struct {
 	BindAddress *net.TCPAddr
 	Target      string
@@ -42,6 +48,8 @@ type TCPClientTunnelConfig struct {
 
 type STDIOTunnelConfig struct {
 	Target string
+	Input  *os.File
+	Output *os.File
 }
 
 type TCPServerTunnelConfig struct {
@@ -59,6 +67,12 @@ type HTTPConfig struct {
 	BindAddress string
 	Username    string
 	Password    string
+	CertFile    string
+	KeyFile     string
+}
+
+type ResolveConfig struct {
+	ResolveStrategy string
 }
 
 // PACConfig holds the configuration for the built-in gfwlist2pac HTTP server.
@@ -100,6 +114,7 @@ type PACConfig struct {
 type Configuration struct {
 	Device   *DeviceConfig
 	Routines []RoutineSpawner
+	Resolve  *ResolveConfig
 }
 
 func parseString(section *ini.Section, keyName string) (string, error) {
@@ -133,7 +148,7 @@ func parsePort(section *ini.Section, keyName string) (int, error) {
 		return 0, err
 	}
 
-	if !(port >= 0 && port < 65536) {
+	if port < 0 || port >= 65536 {
 		return 0, errors.New("port should be >= 0 and < 65536")
 	}
 
@@ -421,6 +436,8 @@ func parseSTDIOTunnelConfig(section *ini.Section) (RoutineSpawner, error) {
 		return nil, err
 	}
 	config.Target = targetSection
+	config.Input = os.Stdin
+	config.Output = os.Stdout
 
 	return config, nil
 }
@@ -475,6 +492,49 @@ func parseHTTPConfig(section *ini.Section) (RoutineSpawner, error) {
 
 	password, _ := parseString(section, "Password")
 	config.Password = password
+
+	certFile, _ := parseString(section, "CertFile")
+	config.CertFile = certFile
+
+	keyFile, _ := parseString(section, "KeyFile")
+	config.KeyFile = keyFile
+
+	return config, nil
+}
+
+func parseResolveConfig(section *ini.Section) (*ResolveConfig, error) {
+	config := &ResolveConfig{}
+
+	resolvStrategy, _ := parseString(section, "ResolveStrategy")
+	config.ResolveStrategy = resolvStrategy
+
+	return config, nil
+}
+
+func parseUDPProxyTunnelConfig(section *ini.Section) (RoutineSpawner, error) {
+	config := &UDPProxyTunnelConfig{}
+
+	bindAddress, err := parseString(section, "BindAddress")
+	if err != nil {
+		return nil, err
+	}
+	config.BindAddress = bindAddress
+
+	target, err := parseString(section, "Target")
+	if err != nil {
+		return nil, err
+	}
+	config.Target = target
+
+	inactivityTimeout := 0
+	if sectionKey, err := section.GetKey("InactivityTimeout"); err == nil {
+		timeoutVal, err := sectionKey.Int()
+		if err != nil {
+			return nil, err
+		}
+		inactivityTimeout = timeoutVal
+	}
+	config.InactivityTimeout = inactivityTimeout
 
 	return config, nil
 }
@@ -629,6 +689,10 @@ func ParseConfig(path string) (*Configuration, error) {
 		MTU: 1420,
 	}
 
+	resolve := &ResolveConfig{
+		ResolveStrategy: "auto",
+	}
+
 	root := cfg.Section("")
 	wgConf, err := root.GetKey("WGConfig")
 	wgCfg := cfg
@@ -694,8 +758,21 @@ func ParseConfig(path string) (*Configuration, error) {
 		}
 	}
 
+	if resolveSection, err := cfg.GetSection("Resolve"); err == nil {
+		resolve, err = parseResolveConfig(resolveSection)
+		if err != nil {
+			return nil, err
+	  }
+  }
+
+	err = parseRoutinesConfig(&routinesSpawners, cfg, "UDPProxyTunnel", parseUDPProxyTunnelConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Configuration{
 		Device:   device,
 		Routines: routinesSpawners,
+		Resolve:  resolve,
 	}, nil
 }

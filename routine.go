@@ -189,8 +189,8 @@ func (c CredentialValidator) Valid(username, password string) bool {
 
 // connForward copy data from `from` to `to`
 func connForward(from io.ReadWriteCloser, to io.ReadWriteCloser) {
-	defer from.Close()
-	defer to.Close()
+	defer func() { _ = from.Close() }()
+	defer func() { _ = to.Close() }()
 
 	_, err := io.Copy(to, from)
 	if err != nil {
@@ -206,7 +206,7 @@ func tcpClientForward(vt *VirtualTun, raddr *addressPort, conn net.Conn) {
 		return
 	}
 
-	tcpAddr := TCPAddrFromAddrPort(*target)
+	tcpAddr := net.TCPAddrFromAddrPort(*target)
 
 	sconn, err := vt.Tnet.DialTCP(tcpAddr)
 	if err != nil {
@@ -233,7 +233,7 @@ func STDIOTcpForward(vt *VirtualTun, raddr *addressPort) {
 		return
 	}
 
-	tcpAddr := TCPAddrFromAddrPort(*target)
+	tcpAddr := net.TCPAddrFromAddrPort(*target)
 	sconn, err := vt.Tnet.DialTCP(tcpAddr)
 	if err != nil {
 		errorLogger.Printf("TCP Client Tunnel to %s (%s): %s\n", target, tcpAddr, err.Error())
@@ -283,7 +283,7 @@ func tcpServerForward(vt *VirtualTun, raddr *addressPort, conn net.Conn) {
 		return
 	}
 
-	tcpAddr := TCPAddrFromAddrPort(*target)
+	tcpAddr := net.TCPAddrFromAddrPort(*target)
 
 	sconn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
@@ -450,7 +450,7 @@ func (d VirtualTun) pingIPs() {
 			d.PingRecord[addr.String()] = uint64(time.Now().Unix())
 			d.PingRecordLock.Unlock()
 
-			defer socket.Close()
+			defer func() { _ = socket.Close() }()
 		}()
 	}
 }

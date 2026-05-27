@@ -30,7 +30,7 @@ var default_config_paths = []string{
 	os.Getenv("HOME") + "/.config/wireproxy.conf",
 }
 
-var version = "1.0.13-dev"
+var version = "1.0.15-dev"
 
 func panicIfError(err error) {
 	if err != nil {

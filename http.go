@@ -131,15 +131,15 @@ func (s *HTTPServer) serve(conn net.Conn) {
 	}
 
 	go func() {
-		defer conn.Close()
-		defer peer.Close()
+		defer func() { _ = conn.Close() }()
+		defer func() { _ = peer.Close() }()
 
 		_, _ = io.Copy(conn, peer)
 	}()
 
 	go func() {
-		defer conn.Close()
-		defer peer.Close()
+		defer func() { _ = conn.Close() }()
+		defer func() { _ = peer.Close() }()
 
 		_, _ = io.Copy(peer, conn)
 	}()
