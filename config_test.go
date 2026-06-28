@@ -7,6 +7,23 @@ import (
 	"github.com/go-ini/ini"
 )
 
+// ---------------------------------------------------------------------------
+// helpers shared across PAC config tests
+// ---------------------------------------------------------------------------
+
+func getPACSection(t *testing.T, raw string) *ini.Section {
+	t.Helper()
+	iniData, err := loadIniConfig(raw)
+	if err != nil {
+		t.Fatalf("loadIniConfig: %s", err)
+	}
+	sections, err := iniData.SectionsByName("PAC")
+	if err != nil || len(sections) < 1 {
+		t.Fatal("expected at least one [PAC] section")
+	}
+	return sections[0]
+}
+
 func loadIniConfig(config string) (*ini.File, error) {
 	iniOpt := ini.LoadOptions{
 		Insensitive:            true,
@@ -678,5 +695,283 @@ H1 = 2
 	}
 	if err.Error() != "values of the H1-H4 fields must be unique" {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PAC config parsing tests
+// ---------------------------------------------------------------------------
+
+func TestPACConfigAllFields(t *testing.T) {
+	const config = `
+[PAC]
+BindAddress = 127.0.0.1:8080
+GFWList     = https://cdn.jsdelivr.net/gh/gfwlist/gfwlist/gfwlist.txt
+CacheFile   = /tmp/gfwlist_cache.txt
+ExtraRules  = /tmp/extra_rules.txt
+ProxyOrder  = SOCKS5,SOCKS,DIRECT
+`
+	spawner, err := parsePACConfig(getPACSection(t, config))
+	if err != nil {
+		t.Fatalf("parsePACConfig error: %s", err)
+	}
+	cfg, ok := spawner.(*PACConfig)
+	if !ok {
+		t.Fatal("expected *PACConfig")
+	}
+
+	if cfg.BindAddress != "127.0.0.1:8080" {
+		t.Errorf("BindAddress = %q, want 127.0.0.1:8080", cfg.BindAddress)
+	}
+	if cfg.GFWList != "https://cdn.jsdelivr.net/gh/gfwlist/gfwlist/gfwlist.txt" {
+		t.Errorf("GFWList = %q", cfg.GFWList)
+	}
+	if cfg.CacheFile != "/tmp/gfwlist_cache.txt" {
+		t.Errorf("CacheFile = %q", cfg.CacheFile)
+	}
+	if cfg.ExtraRules != "/tmp/extra_rules.txt" {
+		t.Errorf("ExtraRules = %q", cfg.ExtraRules)
+	}
+	want := []string{"SOCKS5", "SOCKS", "DIRECT"}
+	if len(cfg.ProxyOrder) != len(want) {
+		t.Fatalf("ProxyOrder = %v, want %v", cfg.ProxyOrder, want)
+	}
+	for i, v := range want {
+		if cfg.ProxyOrder[i] != v {
+			t.Errorf("ProxyOrder[%d] = %q, want %q", i, cfg.ProxyOrder[i], v)
+		}
+	}
+	// Proxy is populated by ParseConfig (buildProxyString), not by parsePACConfig.
+	if cfg.Proxy != "" {
+		t.Errorf("Proxy should be empty after parsePACConfig, got %q", cfg.Proxy)
+	}
+}
+
+func TestPACConfigLocalGFWList(t *testing.T) {
+	const config = `
+[PAC]
+BindAddress = 127.0.0.1:9090
+GFWList     = /etc/wireproxy/gfwlist.txt
+ProxyOrder  = DIRECT
+`
+	spawner, err := parsePACConfig(getPACSection(t, config))
+	if err != nil {
+		t.Fatalf("parsePACConfig error: %s", err)
+	}
+	cfg := spawner.(*PACConfig)
+	if cfg.GFWList != "/etc/wireproxy/gfwlist.txt" {
+		t.Errorf("GFWList = %q", cfg.GFWList)
+	}
+}
+
+func TestPACConfigOptionalFieldsDefaultToEmpty(t *testing.T) {
+	const config = `
+[PAC]
+BindAddress = 127.0.0.1:9090
+GFWList     = /local/gfwlist.txt
+ProxyOrder  = DIRECT
+`
+	spawner, err := parsePACConfig(getPACSection(t, config))
+	if err != nil {
+		t.Fatalf("parsePACConfig error: %s", err)
+	}
+	cfg := spawner.(*PACConfig)
+	if cfg.CacheFile != "" {
+		t.Errorf("CacheFile should be empty, got %q", cfg.CacheFile)
+	}
+	if cfg.ExtraRules != "" {
+		t.Errorf("ExtraRules should be empty, got %q", cfg.ExtraRules)
+	}
+}
+
+func TestPACConfigMissingBindAddress(t *testing.T) {
+	const config = `
+[PAC]
+GFWList    = https://example.com/gfwlist.txt
+ProxyOrder = SOCKS5,DIRECT
+`
+	_, err := parsePACConfig(getPACSection(t, config))
+	if err == nil {
+		t.Fatal("expected error for missing BindAddress")
+	}
+	if !strings.Contains(err.Error(), "BindAddress") {
+		t.Errorf("error should mention BindAddress, got: %v", err)
+	}
+}
+
+func TestPACConfigInvalidBindAddress(t *testing.T) {
+	const config = `
+[PAC]
+BindAddress = not-a-valid-address
+GFWList     = /local/gfwlist.txt
+ProxyOrder  = DIRECT
+`
+	_, err := parsePACConfig(getPACSection(t, config))
+	if err == nil {
+		t.Fatal("expected error for invalid BindAddress")
+	}
+	if !strings.Contains(err.Error(), "BindAddress") {
+		t.Errorf("error should mention BindAddress, got: %v", err)
+	}
+}
+
+func TestPACConfigMissingGFWList(t *testing.T) {
+	const config = `
+[PAC]
+BindAddress = 127.0.0.1:8080
+ProxyOrder  = SOCKS5,DIRECT
+`
+	_, err := parsePACConfig(getPACSection(t, config))
+	if err == nil {
+		t.Fatal("expected error for missing GFWList")
+	}
+	if !strings.Contains(err.Error(), "GFWList") {
+		t.Errorf("error should mention GFWList, got: %v", err)
+	}
+}
+
+func TestPACConfigMissingProxyOrder(t *testing.T) {
+	const config = `
+[PAC]
+BindAddress = 127.0.0.1:8080
+GFWList     = https://example.com/gfwlist.txt
+`
+	_, err := parsePACConfig(getPACSection(t, config))
+	if err == nil {
+		t.Fatal("expected error for missing ProxyOrder")
+	}
+	if !strings.Contains(err.Error(), "ProxyOrder") {
+		t.Errorf("error should mention ProxyOrder, got: %v", err)
+	}
+}
+
+func TestPACConfigProxyOrderParsedWithSpaces(t *testing.T) {
+	const config = `
+[PAC]
+BindAddress = 127.0.0.1:8080
+GFWList     = /local/gfwlist.txt
+ProxyOrder  = SOCKS5, SOCKS, DIRECT
+`
+	spawner, err := parsePACConfig(getPACSection(t, config))
+	if err != nil {
+		t.Fatalf("parsePACConfig error: %s", err)
+	}
+	cfg := spawner.(*PACConfig)
+	// Spaces around commas must be trimmed
+	for i, want := range []string{"SOCKS5", "SOCKS", "DIRECT"} {
+		if cfg.ProxyOrder[i] != want {
+			t.Errorf("ProxyOrder[%d] = %q, want %q", i, cfg.ProxyOrder[i], want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// buildProxyString tests
+// ---------------------------------------------------------------------------
+
+func TestBuildProxyStringSocks5AndDirect(t *testing.T) {
+	spawners := []RoutineSpawner{
+		&Socks5Config{BindAddress: "127.0.0.1:1088"},
+	}
+	proxy, err := buildProxyString([]string{"SOCKS5", "DIRECT"}, spawners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "SOCKS5 127.0.0.1:1088; DIRECT"
+	if proxy != want {
+		t.Errorf("got %q, want %q", proxy, want)
+	}
+}
+
+func TestBuildProxyStringFullChain(t *testing.T) {
+	spawners := []RoutineSpawner{
+		&Socks5Config{BindAddress: "127.0.0.1:1088"},
+	}
+	proxy, err := buildProxyString([]string{"SOCKS5", "SOCKS", "DIRECT"}, spawners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "SOCKS5 127.0.0.1:1088; SOCKS 127.0.0.1:1088; DIRECT"
+	if proxy != want {
+		t.Errorf("got %q, want %q", proxy, want)
+	}
+}
+
+func TestBuildProxyStringDirectOnly(t *testing.T) {
+	proxy, err := buildProxyString([]string{"DIRECT"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proxy != "DIRECT" {
+		t.Errorf("got %q, want %q", proxy, "DIRECT")
+	}
+}
+
+func TestBuildProxyStringHTTPProxy(t *testing.T) {
+	spawners := []RoutineSpawner{
+		&HTTPConfig{BindAddress: "127.0.0.1:8888"},
+	}
+	proxy, err := buildProxyString([]string{"PROXY", "DIRECT"}, spawners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "PROXY 127.0.0.1:8888; DIRECT"
+	if proxy != want {
+		t.Errorf("got %q, want %q", proxy, want)
+	}
+}
+
+func TestBuildProxyStringCaseInsensitive(t *testing.T) {
+	spawners := []RoutineSpawner{
+		&Socks5Config{BindAddress: "127.0.0.1:1088"},
+	}
+	proxy, err := buildProxyString([]string{"socks5", "direct"}, spawners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "SOCKS5 127.0.0.1:1088; DIRECT"
+	if proxy != want {
+		t.Errorf("got %q, want %q", proxy, want)
+	}
+}
+
+func TestBuildProxyStringMissingSocks5Section(t *testing.T) {
+	_, err := buildProxyString([]string{"SOCKS5", "DIRECT"}, nil)
+	if err == nil {
+		t.Fatal("expected error when SOCKS5 requested but no Socks5 section")
+	}
+	if !strings.Contains(err.Error(), "SOCKS5") {
+		t.Errorf("error should mention SOCKS5, got: %v", err)
+	}
+}
+
+func TestBuildProxyStringMissingHTTPSection(t *testing.T) {
+	_, err := buildProxyString([]string{"PROXY", "DIRECT"}, nil)
+	if err == nil {
+		t.Fatal("expected error when PROXY requested but no HTTP section")
+	}
+}
+
+func TestBuildProxyStringUnknownType(t *testing.T) {
+	_, err := buildProxyString([]string{"UNKNOWN", "DIRECT"}, nil)
+	if err == nil {
+		t.Fatal("expected error for unknown proxy type")
+	}
+	if !strings.Contains(err.Error(), "UNKNOWN") {
+		t.Errorf("error should mention the unknown type, got: %v", err)
+	}
+}
+
+func TestBuildProxyStringUsesFirstSocks5Section(t *testing.T) {
+	spawners := []RoutineSpawner{
+		&Socks5Config{BindAddress: "127.0.0.1:1088"},
+		&Socks5Config{BindAddress: "127.0.0.1:2088"},
+	}
+	proxy, err := buildProxyString([]string{"SOCKS5"}, spawners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proxy != "SOCKS5 127.0.0.1:1088" {
+		t.Errorf("expected first Socks5 address, got %q", proxy)
 	}
 }
