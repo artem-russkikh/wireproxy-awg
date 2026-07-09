@@ -395,18 +395,27 @@ func (d VirtualTun) pingIPs() {
 			icmpBytes, _ = (&icmp.Message{Type: ipv6.ICMPTypeEchoRequest, Code: 0, Body: &requestPing}).Marshal(nil)
 		} else {
 			errorLogger.Printf("Failed to ping %s: invalid address: %s\n", addr, addr.String())
+			_ = socket.Close()
 			continue
 		}
 
-		_ = socket.SetReadDeadline(time.Now().Add(time.Duration(d.Conf.CheckAliveInterval) * time.Second))
+		err = socket.SetReadDeadline(time.Now().Add(time.Duration(d.Conf.CheckAliveInterval) * time.Second))
+		if err != nil {
+			errorLogger.Printf("Failed to set ping read deadline for %s: %s\n", addr, err.Error())
+			_ = socket.Close()
+			continue
+		}
 		_, err = socket.Write(icmpBytes)
 		if err != nil {
 			errorLogger.Printf("Failed to ping %s: %s\n", addr, err.Error())
+			_ = socket.Close()
 			continue
 		}
 
 		addr := addr
 		go func() {
+			defer func() { _ = socket.Close() }()
+
 			n, err := socket.Read(icmpBytes[:])
 			if err != nil {
 				errorLogger.Printf("Failed to read ping response from %s: %s\n", addr, err.Error())
@@ -449,8 +458,6 @@ func (d VirtualTun) pingIPs() {
 			d.PingRecordLock.Lock()
 			d.PingRecord[addr.String()] = uint64(time.Now().Unix())
 			d.PingRecordLock.Unlock()
-
-			defer func() { _ = socket.Close() }()
 		}()
 	}
 }
