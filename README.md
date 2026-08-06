@@ -80,6 +80,70 @@ go install github.com/artem-russkikh/wireproxy-awg/cmd/wireproxy@v1.0.17 # or @l
 
 Instructions for using wireproxy with Firefox container tabs and auto-start on MacOS can be found [here](/UseWithVPN.md).
 
+# AmneziaWG parameters
+
+This fork supports AmneziaWG 1.0, 2.0, and 3.0. The obfuscation parameters go
+into the `[Interface]` section, next to the usual wireguard ones, and use the
+same names as an `awg-quick` configuration, so a config exported from the
+Amnezia client can be pasted in as is. Every parameter is optional: with none
+of them set wireproxy behaves like plain wireguard.
+
+Values written as a *range* accept either a single number (`25`) or an interval
+(`15-25`), in which case a random value inside the interval is picked for every
+packet.
+
+### Junk packets (AmneziaWG 1.0)
+
+| Parameter | Value | Meaning |
+| --- | --- | --- |
+| `Jc` | 1-128 | number of junk packets sent before every handshake |
+| `Jmin` | bytes | minimum junk packet size |
+| `Jmax` | bytes, <= 1280 | maximum junk packet size |
+| `S1` | bytes | random padding prepended to the handshake initiation message |
+| `S2` | bytes | random padding prepended to the handshake response message |
+| `H1` | range | message type of the handshake initiation message |
+| `H2` | range | message type of the handshake response message |
+| `H3` | range | message type of the cookie reply message |
+| `H4` | range | message type of the transport message |
+
+`H1`-`H4` must not overlap, and `S1` + 148 must differ from `S2` + 92.
+
+### Signature packets (AmneziaWG 2.0)
+
+| Parameter | Value | Meaning |
+| --- | --- | --- |
+| `S3` | bytes | random padding prepended to the cookie reply message |
+| `S4` | bytes | random padding prepended to transport messages |
+| `I1` - `I5` | tag sequence | custom packets sent before every handshake, in order |
+
+The `I1`-`I5` value is a sequence of tags:
+
+| Tag | Meaning |
+| --- | --- |
+| `<b 0x[hex]>` | the given bytes, as is |
+| `<r [size]>` | `size` random bytes |
+| `<rd [size]>` | `size` random digits |
+| `<rc [size]>` | `size` random letters |
+| `<t>` | current time, 4 bytes, UNIX format |
+
+### Header protection, content padding and timings (AmneziaWG 3.0)
+
+| Parameter | Value | Meaning |
+| --- | --- | --- |
+| `HeaderProtectionKey` | base64 key | encrypts the low entropy fields of every packet header |
+| `ContentPaddingAddition` | range | extra random padding added to transport messages |
+| `RekeyAfterTime` | range, seconds | time after which a new handshake is started |
+| `RekeyTimeout` | range, seconds | time after which a handshake is retried |
+| `RejectAfterTime` | range, seconds | time after which the keys are no longer used |
+| `KeepaliveTimeout` | range, seconds | idle time after which a keepalive is sent |
+| `MaxHandshakeAttempts` | range | how many times a handshake is retried |
+
+`HeaderProtectionKey` is generated with `awg genkey` and has to be the same on
+both sides. It uses the `S1`-`S4` padding as its nonce, so all four of them have
+to be set to at least 12 when it is in use.
+
+In the `[Peer]` section `PersistentKeepalive` also accepts a range.
+
 # Sample config file
 
 ```ini
@@ -94,11 +158,32 @@ PrivateKey = uCTIK+56CPyCvwJxmU5dBfuyJvPuSXAq1FzHdnIxe1Q=
 # PrivateKey = $MY_WIREGUARD_PRIVATE_KEY # Alternatively, reference environment variables
 DNS = 10.200.200.1
 
+# AmneziaWG parameters, all optional. See the section above for what they mean.
+#Jc = 5
+#Jmin = 50
+#Jmax = 1000
+#S1 = 12
+#S2 = 15
+#S3 = 18
+#S4 = 21
+#H1 = 1234567
+#H2 = 2345678
+#H3 = 3456789
+#H4 = 4567890
+#I1 = <b 0x504f5354><rc 8><t>
+#HeaderProtectionKey = 6DPqLDkFO7mFvPKGvIY0zpk4iVwPQBHCFY2iVLdPGmE=
+#ContentPaddingAddition = 10-100
+#RekeyAfterTime = 100-120
+#RekeyTimeout = 5
+#RejectAfterTime = 180-200
+#KeepaliveTimeout = 10-15
+#MaxHandshakeAttempts = 18-20
+
 [Peer]
 PublicKey = QP+A67Z2UBrMgvNIdHv8gPel5URWNLS4B3ZQ2hQIZlg=
 # PresharedKey = UItQuvLsyh50ucXHfjF0bbR4IIpVBd74lwKc8uIPXXs= (optional)
 Endpoint = my.ddns.example.com:51820
-# PersistentKeepalive = 25 (optional)
+# PersistentKeepalive = 25 (optional, a range like 15-25 also works)
 
 # TCPClientTunnel is a tunnel listening on your machine,
 # and it forwards any TCP traffic received to the specified target via wireguard.
