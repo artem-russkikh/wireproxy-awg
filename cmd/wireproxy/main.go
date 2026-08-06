@@ -14,7 +14,7 @@ import (
 	"syscall"
 
 	"github.com/akamensky/argparse"
-	"github.com/amnezia-vpn/amneziawg-go/device"
+	"github.com/amnezia-vpn/amneziawg-go/v3/device"
 	wireproxyawg "github.com/artem-russkikh/wireproxy-awg"
 	"suah.dev/protect"
 )
