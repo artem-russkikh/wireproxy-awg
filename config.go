@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -14,11 +15,13 @@ import (
 )
 
 type PeerConfig struct {
-	PublicKey    string
-	PreSharedKey string
-	Endpoint     *string
-	KeepAlive    int
-	AllowedIPs   []netip.Prefix
+	PublicKey      string
+	PreSharedKey   string
+	Endpoint       *string
+	KeepAlive      int // PersistentKeepalive in seconds; lower bound when a range is configured
+	KeepAliveMax   int // upper bound of the PersistentKeepalive range, ignored when below KeepAlive
+	AllowedIPs     []netip.Prefix
+	keepAliveRange *uintRange // exact parsed range; preserves uint32 values on 32-bit platforms
 }
 
 // DeviceConfig contains the information to initiate a wireguard connection
@@ -358,11 +361,18 @@ func ParsePeers(cfg *ini.File, peers *[]PeerConfig) error {
 		}
 
 		if sectionKey, err := section.GetKey("PersistentKeepalive"); err == nil {
-			value, err := sectionKey.Int()
-			if err != nil {
-				return err
+			// AmneziaWG 3.0 also accepts a range, and wg-quick accepts "off".
+			raw := strings.TrimSpace(sectionKey.String())
+			if strings.EqualFold(raw, "off") {
+				raw = "0"
 			}
-			peer.KeepAlive = value
+			value, err := parseUintRange(raw)
+			if err != nil {
+				return fmt.Errorf("invalid PersistentKeepalive value: %w", err)
+			}
+			peer.KeepAlive = int(value.min)
+			peer.KeepAliveMax = int(value.max)
+			peer.keepAliveRange = &value
 		}
 
 		peer.AllowedIPs, err = parseAllowedIPs(section)

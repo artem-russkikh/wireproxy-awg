@@ -680,3 +680,301 @@ H1 = 2
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestWireguardConfWithAWG3Params(t *testing.T) {
+	const config = `
+[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+DNS = 1.1.1.1
+Jc = 5
+Jmin = 10
+Jmax = 50
+S1 = 12
+S2 = 15
+S3 = 18
+S4 = 21
+H1 = 100
+H2 = 200
+H3 = 300
+H4 = 400
+HeaderProtectionKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=
+ContentPaddingAddition = 10-100
+RekeyAfterTime = 100-120
+RekeyTimeout = 5
+RejectAfterTime = 180-200
+KeepaliveTimeout = 10-15
+MaxHandshakeAttempts = 18-20
+
+[Peer]
+PublicKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 94.140.11.15:51820
+PersistentKeepalive = 15-25
+`
+
+	var cfg DeviceConfig
+	iniData, err := loadIniConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ParseInterface(iniData, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err = ParsePeers(iniData, &cfg.Peers); err != nil {
+		t.Fatal(err)
+	}
+
+	ipcReq, err := CreateIPCRequest(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, line := range []string{
+		"header_protection_key=7bc2ca01cf9ff71133abd02befe31f291aecfa067fe32cefa5124b449fd5275c",
+		"content_padding_addition=10-100",
+		"rekey_after_time=100-120",
+		"rekey_timeout=5",
+		"reject_after_time=180-200",
+		"keepalive_timeout=10-15",
+		"max_handshake_attempts=18-20",
+		"persistent_keepalive_interval=15-25",
+	} {
+		if !strings.Contains(ipcReq.IpcRequest, line) {
+			t.Fatalf("%q should be present in IPC request:\n%s", line, ipcReq.IpcRequest)
+		}
+	}
+}
+
+func TestWireguardConfWithAWG31Params(t *testing.T) {
+	const config = `
+[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+RandomTrailers = on
+DisableCookies = true
+
+[Peer]
+PublicKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 94.140.11.15:51820
+`
+
+	var cfg DeviceConfig
+	iniData, err := loadIniConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ParseInterface(iniData, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err = ParsePeers(iniData, &cfg.Peers); err != nil {
+		t.Fatal(err)
+	}
+
+	ipcReq, err := CreateIPCRequest(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"random_trailers=true", "disable_cookies=true"} {
+		if !strings.Contains(ipcReq.IpcRequest, line) {
+			t.Fatalf("%q should be present in IPC request:\n%s", line, ipcReq.IpcRequest)
+		}
+	}
+}
+
+func TestWireguardConfWithDisabledAWG31Params(t *testing.T) {
+	iniData, err := loadIniConfig(`[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+RandomTrailers = off
+DisableCookies = false
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cfg DeviceConfig
+	if err = ParseInterface(iniData, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	ipcReq, err := CreateIPCRequest(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"random_trailers=false", "disable_cookies=false"} {
+		if !strings.Contains(ipcReq.IpcRequest, line) {
+			t.Fatalf("%q should be present in IPC request:\n%s", line, ipcReq.IpcRequest)
+		}
+	}
+}
+
+func TestWireguardConfRejectsInvalidAWG31Params(t *testing.T) {
+	iniData, err := loadIniConfig(`[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+RandomTrailers = sometimes
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cfg DeviceConfig
+	err = ParseInterface(iniData, &cfg)
+	if err == nil || !strings.Contains(err.Error(), "invalid RandomTrailers value") {
+		t.Fatalf("expected invalid RandomTrailers error, got %v", err)
+	}
+}
+
+func TestWireguardConfWithoutAWG3ParamsEmitsNothing(t *testing.T) {
+	const config = `
+[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+DNS = 1.1.1.1
+Jc = 5
+Jmin = 10
+Jmax = 50
+
+[Peer]
+PublicKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 94.140.11.15:51820
+PersistentKeepalive = 25
+`
+
+	var cfg DeviceConfig
+	iniData, err := loadIniConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ParseInterface(iniData, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err = ParsePeers(iniData, &cfg.Peers); err != nil {
+		t.Fatal(err)
+	}
+	ipcReq, err := CreateIPCRequest(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, key := range []string{
+		"header_protection_key=",
+		"content_padding_addition=",
+		"rekey_after_time=",
+		"rekey_timeout=",
+		"reject_after_time=",
+		"keepalive_timeout=",
+		"max_handshake_attempts=",
+		"random_trailers=",
+		"disable_cookies=",
+	} {
+		if strings.Contains(ipcReq.IpcRequest, key) {
+			t.Fatalf("%q should not be emitted when it is not set", key)
+		}
+	}
+	if !strings.Contains(ipcReq.IpcRequest, "persistent_keepalive_interval=25\n") {
+		t.Fatalf("single PersistentKeepalive value should stay unchanged:\n%s", ipcReq.IpcRequest)
+	}
+}
+
+func TestWireguardConfRejectsInvalidAWG3Params(t *testing.T) {
+	tests := []struct {
+		name       string
+		parameters string
+		wantError  string
+	}{
+		{
+			name: "small header nonce padding",
+			parameters: `S1 = 12
+S2 = 15
+S3 = 18
+S4 = 11
+HeaderProtectionKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=`,
+			wantError: "values of the S1-S4 fields must all be at least 12 when HeaderProtectionKey is set",
+		},
+		{
+			name: "missing header nonce padding",
+			parameters: `S1 = 12
+S2 = 15
+S3 = 18
+HeaderProtectionKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=`,
+			wantError: "values of the S1-S4 fields must all be at least 12 when HeaderProtectionKey is set",
+		},
+		{
+			name:       "descending range",
+			parameters: "RekeyTimeout = 30-10",
+			wantError:  "invalid RekeyTimeout value: invalid range: lower bound cannot exceed upper bound",
+		},
+		{
+			name:       "invalid header protection key",
+			parameters: "HeaderProtectionKey = not-a-key",
+			wantError:  "invalid HeaderProtectionKey value:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := `[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+DNS = 1.1.1.1
+` + tt.parameters
+			iniData, err := loadIniConfig(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var cfg DeviceConfig
+			err = ParseInterface(iniData, &cfg)
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantError, err)
+			}
+		})
+	}
+}
+
+func TestWireguardConfWithPersistentKeepaliveOff(t *testing.T) {
+	const config = `
+[Peer]
+PublicKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 94.140.11.15:51820
+PersistentKeepalive = off
+`
+
+	iniData, err := loadIniConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var peers []PeerConfig
+	if err = ParsePeers(iniData, &peers); err != nil {
+		t.Fatal(err)
+	}
+	if peers[0].KeepAlive != 0 || peers[0].KeepAliveMax != 0 {
+		t.Fatalf("off should disable keepalive, got %d-%d", peers[0].KeepAlive, peers[0].KeepAliveMax)
+	}
+}
+
+func TestPersistentKeepaliveRangeCrossesInt32Boundary(t *testing.T) {
+	iniData, err := loadIniConfig(`[Peer]
+PublicKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 2147483647-2147483648
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var peers []PeerConfig
+	if err = ParsePeers(iniData, &peers); err != nil {
+		t.Fatal(err)
+	}
+	setting, err := CreateIPCRequest(&DeviceConfig{Peers: peers})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(setting.IpcRequest, "persistent_keepalive_interval=2147483647-2147483648\n") {
+		t.Fatalf("range corrupted: %s", setting.IpcRequest)
+	}
+}

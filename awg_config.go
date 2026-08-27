@@ -2,11 +2,17 @@ package wireproxy
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/go-ini/ini"
 )
+
+// Header protection uses the S1-S4 crypto padding as the cipher nonce, so every
+// padding has to be at least as large as that nonce.
+// Mirrors device.HeaderCipherNonceSize of amneziawg-go.
+const headerCipherNonceSize = 12
 
 type ASecConfigType struct {
 	junkPacketCount               int    // Jc
@@ -40,6 +46,29 @@ type ASecConfigType struct {
 	i3                            *string
 	i4                            *string
 	i5                            *string
+	headerProtectionKey           *string    // HeaderProtectionKey, hex-encoded
+	contentPaddingAddition        *uintRange // ContentPaddingAddition
+	rekeyAfterTime                *uintRange // RekeyAfterTime, seconds
+	rekeyTimeout                  *uintRange // RekeyTimeout, seconds
+	rejectAfterTime               *uintRange // RejectAfterTime, seconds
+	keepaliveTimeout              *uintRange // KeepaliveTimeout, seconds
+	maxHandshakeAttempts          *uintRange // MaxHandshakeAttempts
+	randomTrailers                *bool      // RandomTrailers
+	disableCookies                *bool      // DisableCookies
+}
+
+// uintRange is an AmneziaWG interval parameter, written as either "a" or "a-b".
+// The device picks a random value inside the interval for every packet it sends.
+type uintRange struct {
+	min uint32
+	max uint32
+}
+
+func (r uintRange) String() string {
+	if r.min == r.max {
+		return strconv.FormatUint(uint64(r.min), 10)
+	}
+	return strconv.FormatUint(uint64(r.min), 10) + "-" + strconv.FormatUint(uint64(r.max), 10)
 }
 
 func ParseASecConfig(section *ini.Section) (*ASecConfigType, error) {
@@ -130,54 +159,54 @@ func ParseASecConfig(section *ini.Section) (*ASecConfigType, error) {
 	}
 
 	if sectionKey, err := section.GetKey("H1"); err == nil {
-		minValue, maxValue, err := parseMagicHeaderInterval(sectionKey.String())
+		value, err := parseUintRange(sectionKey.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid H1 value: %w", err)
 		}
 		if aSecConfig == nil {
 			aSecConfig = &ASecConfigType{}
 		}
-		aSecConfig.initPacketMagicHeader = minValue
-		aSecConfig.initPacketMagicHeaderMax = maxValue
+		aSecConfig.initPacketMagicHeader = value.min
+		aSecConfig.initPacketMagicHeaderMax = value.max
 		aSecConfig.hasInitPacketMagicHeader = true
 	}
 
 	if sectionKey, err := section.GetKey("H2"); err == nil {
-		minValue, maxValue, err := parseMagicHeaderInterval(sectionKey.String())
+		value, err := parseUintRange(sectionKey.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid H2 value: %w", err)
 		}
 		if aSecConfig == nil {
 			aSecConfig = &ASecConfigType{}
 		}
-		aSecConfig.responsePacketMagicHeader = minValue
-		aSecConfig.responsePacketMagicHeaderMax = maxValue
+		aSecConfig.responsePacketMagicHeader = value.min
+		aSecConfig.responsePacketMagicHeaderMax = value.max
 		aSecConfig.hasResponsePacketMagicHeader = true
 	}
 
 	if sectionKey, err := section.GetKey("H3"); err == nil {
-		minValue, maxValue, err := parseMagicHeaderInterval(sectionKey.String())
+		value, err := parseUintRange(sectionKey.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid H3 value: %w", err)
 		}
 		if aSecConfig == nil {
 			aSecConfig = &ASecConfigType{}
 		}
-		aSecConfig.underloadPacketMagicHeader = minValue
-		aSecConfig.underloadPacketMagicHeaderMax = maxValue
+		aSecConfig.underloadPacketMagicHeader = value.min
+		aSecConfig.underloadPacketMagicHeaderMax = value.max
 		aSecConfig.hasUnderloadPacketMagicHeader = true
 	}
 
 	if sectionKey, err := section.GetKey("H4"); err == nil {
-		minValue, maxValue, err := parseMagicHeaderInterval(sectionKey.String())
+		value, err := parseUintRange(sectionKey.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid H4 value: %w", err)
 		}
 		if aSecConfig == nil {
 			aSecConfig = &ASecConfigType{}
 		}
-		aSecConfig.transportPacketMagicHeader = minValue
-		aSecConfig.transportPacketMagicHeaderMax = maxValue
+		aSecConfig.transportPacketMagicHeader = value.min
+		aSecConfig.transportPacketMagicHeaderMax = value.max
 		aSecConfig.hasTransportPacketMagicHeader = true
 	}
 
@@ -219,6 +248,67 @@ func ParseASecConfig(section *ini.Section) (*ASecConfigType, error) {
 			aSecConfig = &ASecConfigType{}
 		}
 		aSecConfig.i5 = &value
+	}
+
+	if sectionKey, err := section.GetKey("HeaderProtectionKey"); err == nil {
+		value, err := encodeBase64ToHex(sectionKey.String())
+		if err != nil {
+			return nil, fmt.Errorf("invalid HeaderProtectionKey value: %w", err)
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		aSecConfig.headerProtectionKey = &value
+	}
+
+	rangeKeys := []struct {
+		name string
+		dst  func(*ASecConfigType) **uintRange
+	}{
+		{"ContentPaddingAddition", func(c *ASecConfigType) **uintRange { return &c.contentPaddingAddition }},
+		{"RekeyAfterTime", func(c *ASecConfigType) **uintRange { return &c.rekeyAfterTime }},
+		{"RekeyTimeout", func(c *ASecConfigType) **uintRange { return &c.rekeyTimeout }},
+		{"RejectAfterTime", func(c *ASecConfigType) **uintRange { return &c.rejectAfterTime }},
+		{"KeepaliveTimeout", func(c *ASecConfigType) **uintRange { return &c.keepaliveTimeout }},
+		{"MaxHandshakeAttempts", func(c *ASecConfigType) **uintRange { return &c.maxHandshakeAttempts }},
+	}
+
+	for _, rangeKey := range rangeKeys {
+		sectionKey, err := section.GetKey(rangeKey.name)
+		if err != nil {
+			continue
+		}
+		value, err := parseUintRange(sectionKey.String())
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s value: %w", rangeKey.name, err)
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		*rangeKey.dst(aSecConfig) = &value
+	}
+
+	boolKeys := []struct {
+		name string
+		dst  func(*ASecConfigType) **bool
+	}{
+		{"RandomTrailers", func(c *ASecConfigType) **bool { return &c.randomTrailers }},
+		{"DisableCookies", func(c *ASecConfigType) **bool { return &c.disableCookies }},
+	}
+
+	for _, boolKey := range boolKeys {
+		sectionKey, err := section.GetKey(boolKey.name)
+		if err != nil {
+			continue
+		}
+		value, err := sectionKey.Bool()
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s value: %w", boolKey.name, err)
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		*boolKey.dst(aSecConfig) = &value
 	}
 
 	if err := ValidateASecConfig(aSecConfig); err != nil {
@@ -290,6 +380,22 @@ func ValidateASecConfig(config *ASecConfigType) error {
 		return errors.New("values of the H1-H4 fields must be unique")
 	}
 
+	if config.headerProtectionKey != nil {
+		for _, padding := range []packetSizeCheck{
+			{isSet: config.hasInitPacketJunkSize, size: config.initPacketJunkSize},
+			{isSet: config.hasResponsePacketJunkSize, size: config.responsePacketJunkSize},
+			{isSet: config.hasCookieReplyPacketJunkSize, size: config.cookieReplyPacketJunkSize},
+			{isSet: config.hasTransportPacketJunkSize, size: config.transportPacketJunkSize},
+		} {
+			if !padding.isSet || padding.size < headerCipherNonceSize {
+				return fmt.Errorf(
+					"values of the S1-S4 fields must all be at least %d when HeaderProtectionKey is set",
+					headerCipherNonceSize,
+				)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -306,40 +412,40 @@ const (
 	defaultTransportPacketMagicHeader uint32 = 4
 )
 
-func parseMagicHeaderInterval(value string) (uint32, uint32, error) {
+func parseUintRange(value string) (uintRange, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
-		return 0, 0, errors.New("empty magic header value")
+		return uintRange{}, errors.New("empty range value")
 	}
 
 	parts := strings.Split(trimmed, "-")
 	if len(parts) == 0 || len(parts) > 2 || parts[0] == "" {
-		return 0, 0, errors.New("invalid magic header range format")
+		return uintRange{}, errors.New("invalid range format")
 	}
 
 	minRaw, err := strconv.ParseUint(parts[0], 10, 32)
 	if err != nil {
-		return 0, 0, err
+		return uintRange{}, err
 	}
 	minValue := uint32(minRaw)
 
 	if len(parts) == 1 {
-		return minValue, minValue, nil
+		return uintRange{min: minValue, max: minValue}, nil
 	}
 	if parts[1] == "" {
-		return 0, 0, errors.New("invalid magic header range format")
+		return uintRange{}, errors.New("invalid range format")
 	}
 
 	maxRaw, err := strconv.ParseUint(parts[1], 10, 32)
 	if err != nil {
-		return 0, 0, err
+		return uintRange{}, err
 	}
 	maxValue := uint32(maxRaw)
 	if minValue > maxValue {
-		return 0, 0, errors.New("invalid magic header range: lower bound cannot exceed upper bound")
+		return uintRange{}, errors.New("invalid range: lower bound cannot exceed upper bound")
 	}
 
-	return minValue, maxValue, nil
+	return uintRange{min: minValue, max: maxValue}, nil
 }
 
 func collectEffectiveHeaderIntervals(config *ASecConfigType) []headerInterval {
@@ -386,8 +492,5 @@ func hasOverlappingHeaderIntervals(intervals []headerInterval) bool {
 }
 
 func formatMagicHeaderInterval(minValue uint32, maxValue uint32) string {
-	if minValue == maxValue {
-		return strconv.FormatUint(uint64(minValue), 10)
-	}
-	return strconv.FormatUint(uint64(minValue), 10) + "-" + strconv.FormatUint(uint64(maxValue), 10)
+	return uintRange{min: minValue, max: maxValue}.String()
 }
