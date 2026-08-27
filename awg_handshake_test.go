@@ -91,7 +91,7 @@ func newTunnelPair(t *testing.T, clientConfig string, serverParams ...string) *t
 	return pair
 }
 
-// warmUp spends the first data packet, which amneziawg-go v3.0.3 loses whenever
+// warmUp spends the first data packet, which amneziawg-go loses whenever
 // S4 is set: its TUN reader samples the transport padding once, before it
 // blocks on the first read, and that happens while the device is still
 // unconfigured. The packet then goes out without the padding and the peer,
@@ -238,6 +238,31 @@ MaxHandshakeAttempts = 18-20
 		"h1=123456", "h2=234567", "h3=345678", "h4=456789",
 		"header_protection_key="+mustHexKey(t, "efpsQ5dEcds7RJIU6wZ5VdMItHGQTL/OBbza0xuVV1w="),
 		"content_padding_addition=10-100",
+	)
+
+	pair.sendThrough(t)
+}
+
+func TestTunnelWithAWG31Params(t *testing.T) {
+	pair := newTunnelPair(t, clientConfig(`
+S1 = 12
+S2 = 15
+S3 = 18
+S4 = 21
+H1 = 123456
+H2 = 234567
+H3 = 345678
+H4 = 456789
+HeaderProtectionKey = efpsQ5dEcds7RJIU6wZ5VdMItHGQTL/OBbza0xuVV1w=
+ContentPaddingAddition = 10-100
+RandomTrailers = on
+DisableCookies = on
+`),
+		"s1=12", "s2=15", "s3=18", "s4=21",
+		"h1=123456", "h2=234567", "h3=345678", "h4=456789",
+		"header_protection_key="+mustHexKey(t, "efpsQ5dEcds7RJIU6wZ5VdMItHGQTL/OBbza0xuVV1w="),
+		"content_padding_addition=10-100",
+		"random_trailers=true", "disable_cookies=true",
 	)
 
 	pair.sendThrough(t)

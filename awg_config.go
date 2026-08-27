@@ -53,6 +53,8 @@ type ASecConfigType struct {
 	rejectAfterTime               *uintRange // RejectAfterTime, seconds
 	keepaliveTimeout              *uintRange // KeepaliveTimeout, seconds
 	maxHandshakeAttempts          *uintRange // MaxHandshakeAttempts
+	randomTrailers                *bool      // RandomTrailers
+	disableCookies                *bool      // DisableCookies
 }
 
 // uintRange is an AmneziaWG interval parameter, written as either "a" or "a-b".
@@ -284,6 +286,29 @@ func ParseASecConfig(section *ini.Section) (*ASecConfigType, error) {
 			aSecConfig = &ASecConfigType{}
 		}
 		*rangeKey.dst(aSecConfig) = &value
+	}
+
+	boolKeys := []struct {
+		name string
+		dst  func(*ASecConfigType) **bool
+	}{
+		{"RandomTrailers", func(c *ASecConfigType) **bool { return &c.randomTrailers }},
+		{"DisableCookies", func(c *ASecConfigType) **bool { return &c.disableCookies }},
+	}
+
+	for _, boolKey := range boolKeys {
+		sectionKey, err := section.GetKey(boolKey.name)
+		if err != nil {
+			continue
+		}
+		value, err := sectionKey.Bool()
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s value: %w", boolKey.name, err)
+		}
+		if aSecConfig == nil {
+			aSecConfig = &ASecConfigType{}
+		}
+		*boolKey.dst(aSecConfig) = &value
 	}
 
 	if err := ValidateASecConfig(aSecConfig); err != nil {

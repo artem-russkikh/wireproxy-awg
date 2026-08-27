@@ -746,6 +746,86 @@ PersistentKeepalive = 15-25
 	}
 }
 
+func TestWireguardConfWithAWG31Params(t *testing.T) {
+	const config = `
+[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+RandomTrailers = on
+DisableCookies = true
+
+[Peer]
+PublicKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 94.140.11.15:51820
+`
+
+	var cfg DeviceConfig
+	iniData, err := loadIniConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ParseInterface(iniData, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err = ParsePeers(iniData, &cfg.Peers); err != nil {
+		t.Fatal(err)
+	}
+
+	ipcReq, err := CreateIPCRequest(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"random_trailers=true", "disable_cookies=true"} {
+		if !strings.Contains(ipcReq.IpcRequest, line) {
+			t.Fatalf("%q should be present in IPC request:\n%s", line, ipcReq.IpcRequest)
+		}
+	}
+}
+
+func TestWireguardConfWithDisabledAWG31Params(t *testing.T) {
+	iniData, err := loadIniConfig(`[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+RandomTrailers = off
+DisableCookies = false
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cfg DeviceConfig
+	if err = ParseInterface(iniData, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	ipcReq, err := CreateIPCRequest(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"random_trailers=false", "disable_cookies=false"} {
+		if !strings.Contains(ipcReq.IpcRequest, line) {
+			t.Fatalf("%q should be present in IPC request:\n%s", line, ipcReq.IpcRequest)
+		}
+	}
+}
+
+func TestWireguardConfRejectsInvalidAWG31Params(t *testing.T) {
+	iniData, err := loadIniConfig(`[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+RandomTrailers = sometimes
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cfg DeviceConfig
+	err = ParseInterface(iniData, &cfg)
+	if err == nil || !strings.Contains(err.Error(), "invalid RandomTrailers value") {
+		t.Fatalf("expected invalid RandomTrailers error, got %v", err)
+	}
+}
+
 func TestWireguardConfWithoutAWG3ParamsEmitsNothing(t *testing.T) {
 	const config = `
 [Interface]
@@ -787,6 +867,8 @@ PersistentKeepalive = 25
 		"reject_after_time=",
 		"keepalive_timeout=",
 		"max_handshake_attempts=",
+		"random_trailers=",
+		"disable_cookies=",
 	} {
 		if strings.Contains(ipcReq.IpcRequest, key) {
 			t.Fatalf("%q should not be emitted when it is not set", key)

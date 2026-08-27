@@ -82,7 +82,7 @@ Instructions for using wireproxy with Firefox container tabs and auto-start on M
 
 # AmneziaWG parameters
 
-This fork supports AmneziaWG 1.0, 2.0, and 3.0. The obfuscation parameters go
+This fork supports AmneziaWG 1.0, 2.0, 3.0, and 3.1. The obfuscation parameters go
 into the `[Interface]` section, next to the usual wireguard ones, and use the
 same names as an `awg-quick` configuration, so a config exported from the
 Amnezia client can be pasted in as is. Every parameter is optional: with none
@@ -144,6 +144,17 @@ to be set to at least 12 when it is in use.
 
 In the `[Peer]` section `PersistentKeepalive` also accepts a range.
 
+### Random trailers and disabled cookies (AmneziaWG 3.1)
+
+| Parameter | Value | Meaning |
+| --- | --- | --- |
+| `RandomTrailers` | `on` / `off` | appends random trailing bytes to protocol packets |
+| `DisableCookies` | `on` / `off` | disables sending WireGuard cookie replies |
+
+AWG 3.1 has to be enabled on the server as well. After upgrading an Amnezia
+Self-hosted server, generate a new client configuration instead of reusing or
+converting an AWG 2.0 configuration.
+
 # Sample config file
 
 ```ini
@@ -178,6 +189,8 @@ DNS = 10.200.200.1
 #RejectAfterTime = 180-200
 #KeepaliveTimeout = 10-15
 #MaxHandshakeAttempts = 18-20
+#RandomTrailers = on
+#DisableCookies = on
 
 [Peer]
 PublicKey = QP+A67Z2UBrMgvNIdHv8gPel5URWNLS4B3ZQ2hQIZlg=

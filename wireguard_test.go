@@ -79,6 +79,21 @@ PersistentKeepalive = 15-25
 `)
 }
 
+func TestIPCRequestWithAWG31ParamsIsAcceptedByDevice(t *testing.T) {
+	applyIPCRequest(t, `
+[Interface]
+PrivateKey = LAr1aNSNF9d0MjwUgAVC4020T0N/E5NUtqVv5EnsSz0=
+Address = 10.5.0.2
+RandomTrailers = on
+DisableCookies = on
+
+[Peer]
+PublicKey = e8LKAc+f9xEzq9Ar7+MfKRrs+gZ/4yzvpRJLRJ/VJ1w=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 94.140.11.15:51820
+`)
+}
+
 func TestIPCRequestWithAWG2ParamsIsAcceptedByDevice(t *testing.T) {
 	applyIPCRequest(t, `
 [Interface]

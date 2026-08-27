@@ -81,25 +81,25 @@ func CreateIPCRequest(conf *DeviceConfig) (*DeviceSetting, error) {
 			fmt.Fprintf(&aSecBuilder, "s4=%d\n", aSecConfig.transportPacketJunkSize)
 		}
 		if aSecConfig.hasInitPacketMagicHeader {
-			fmt.Fprintf(&aSecBuilder, 
+			fmt.Fprintf(&aSecBuilder,
 				"h1=%s\n",
 				formatMagicHeaderInterval(aSecConfig.initPacketMagicHeader, aSecConfig.initPacketMagicHeaderMax),
 			)
 		}
 		if aSecConfig.hasResponsePacketMagicHeader {
-			fmt.Fprintf(&aSecBuilder, 
+			fmt.Fprintf(&aSecBuilder,
 				"h2=%s\n",
 				formatMagicHeaderInterval(aSecConfig.responsePacketMagicHeader, aSecConfig.responsePacketMagicHeaderMax),
 			)
 		}
 		if aSecConfig.hasUnderloadPacketMagicHeader {
-			fmt.Fprintf(&aSecBuilder, 
+			fmt.Fprintf(&aSecBuilder,
 				"h3=%s\n",
 				formatMagicHeaderInterval(aSecConfig.underloadPacketMagicHeader, aSecConfig.underloadPacketMagicHeaderMax),
 			)
 		}
 		if aSecConfig.hasTransportPacketMagicHeader {
-			fmt.Fprintf(&aSecBuilder, 
+			fmt.Fprintf(&aSecBuilder,
 				"h4=%s\n",
 				formatMagicHeaderInterval(aSecConfig.transportPacketMagicHeader, aSecConfig.transportPacketMagicHeaderMax),
 			)
@@ -141,6 +141,12 @@ func CreateIPCRequest(conf *DeviceConfig) (*DeviceSetting, error) {
 		}
 		if aSecConfig.maxHandshakeAttempts != nil {
 			fmt.Fprintf(&aSecBuilder, "max_handshake_attempts=%s\n", aSecConfig.maxHandshakeAttempts)
+		}
+		if aSecConfig.randomTrailers != nil {
+			fmt.Fprintf(&aSecBuilder, "random_trailers=%t\n", *aSecConfig.randomTrailers)
+		}
+		if aSecConfig.disableCookies != nil {
+			fmt.Fprintf(&aSecBuilder, "disable_cookies=%t\n", *aSecConfig.disableCookies)
 		}
 
 		request.WriteString(aSecBuilder.String())
