@@ -4,10 +4,10 @@ package wireproxy
 
 import "log"
 
-func (config *Sandbox) Lock(stage string) {
+func (sb *Sandbox) Lock(stage string) {
 	log.Printf("sanboxing is not supported on android")
 }
 
-func (config *Sandbox) LockNetwork(sections []RoutineSpawner, infoAddr *string) {
+func (sb *Sandbox) LockNetwork(sections []RoutineSpawner, infoAddr *string) {
 	log.Printf("network sanboxing is not supported on android")
 }

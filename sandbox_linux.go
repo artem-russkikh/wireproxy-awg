@@ -10,7 +10,7 @@ import (
 	"github.com/landlock-lsm/go-landlock/landlock"
 )
 
-func (config *Sandbox) Lock(stage string) {
+func (sb *Sandbox) Lock(stage string) {
 	switch stage {
 	case "boot":
 		if err := landlock.V1.BestEffort().RestrictPaths(landlock.RODirs("/")); err != nil {
@@ -65,7 +65,7 @@ func extractPort(addr string) uint16 {
 	return uint16(port)
 }
 
-func (config *Sandbox) LockNetwork(sections []RoutineSpawner, infoAddr *string) {
+func (sb *Sandbox) LockNetwork(sections []RoutineSpawner, infoAddr *string) {
 	var rules []landlock.Rule
 	if infoAddr != nil && *infoAddr != "" {
 		rules = append(rules, landlock.BindTCP(extractPort(*infoAddr)))

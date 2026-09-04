@@ -18,7 +18,7 @@ func executablePath() string {
 	return programPath
 }
 
-func (config *Sandbox) Lock(stage string) {
+func (sb *Sandbox) Lock(stage string) {
 	switch stage {
 	case "boot":
 		exePath := executablePath()
@@ -51,6 +51,6 @@ func (config *Sandbox) Lock(stage string) {
 	}
 }
 
-func (config *Sandbox) LockNetwork(sections []RoutineSpawner, infoAddr *string) {
+func (sb *Sandbox) LockNetwork(sections []RoutineSpawner, infoAddr *string) {
 	log.Printf("network sanboxing is not supported on OpenBSD")
 }
