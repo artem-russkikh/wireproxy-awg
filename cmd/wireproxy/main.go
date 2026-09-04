@@ -3,20 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/landlock-lsm/go-landlock/landlock"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/akamensky/argparse"
 	"github.com/amnezia-vpn/amneziawg-go/v3/device"
 	wireproxyawg "github.com/artem-russkikh/wireproxy-awg"
-	"suah.dev/protect"
 )
 
 // an argument to denote that this process was spawned by -d
@@ -29,24 +25,6 @@ var default_config_paths = []string {
 }
 
 var version = "1.0.18-dev"
-
-func panicIfError(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-// attempts to pledge and panic if it fails
-// this does nothing on non-OpenBSD systems
-func pledgeOrPanic(promises string) {
-	panicIfError(protect.Pledge(promises))
-}
-
-// attempts to unveil and panic if it fails
-// this does nothing on non-OpenBSD systems
-func unveilOrPanic(path string, flags string) {
-	panicIfError(protect.Unveil(path, flags))
-}
 
 // get the executable path via syscalls or infer it from argv
 func executablePath() string {
@@ -67,91 +45,6 @@ func configFilePath() (string, bool) {
     return "", false
 }
 
-func lock(stage string) {
-	switch stage {
-	case "boot":
-		exePath := executablePath()
-		// OpenBSD
-		unveilOrPanic("/", "r")
-		unveilOrPanic(exePath, "x")
-		// only allow standard stdio operation, file reading, networking, and exec
-		// also remove unveil permission to lock unveil
-		pledgeOrPanic("stdio rpath inet dns proc exec")
-		// Linux
-		panicIfError(landlock.V1.BestEffort().RestrictPaths(
-			landlock.RODirs("/"),
-		))
-	case "boot-daemon":
-	case "read-config":
-		// OpenBSD
-		pledgeOrPanic("stdio rpath inet dns")
-	case "ready":
-		// no file access is allowed from now on, only networking
-		// OpenBSD
-		pledgeOrPanic("stdio inet dns")
-		// Linux
-		net.DefaultResolver.PreferGo = true // needed to lock down dependencies
-		panicIfError(landlock.V1.BestEffort().RestrictPaths(
-			landlock.ROFiles("/etc/resolv.conf").IgnoreIfMissing(),
-			landlock.ROFiles("/dev/fd").IgnoreIfMissing(),
-			landlock.ROFiles("/dev/zero").IgnoreIfMissing(),
-			landlock.ROFiles("/dev/urandom").IgnoreIfMissing(),
-			landlock.ROFiles("/etc/localtime").IgnoreIfMissing(),
-			landlock.ROFiles("/proc/self/stat").IgnoreIfMissing(),
-			landlock.ROFiles("/proc/self/status").IgnoreIfMissing(),
-			landlock.ROFiles("/usr/share/locale").IgnoreIfMissing(),
-			landlock.ROFiles("/proc/self/cmdline").IgnoreIfMissing(),
-			landlock.ROFiles("/usr/share/zoneinfo").IgnoreIfMissing(),
-			landlock.ROFiles("/proc/sys/kernel/version").IgnoreIfMissing(),
-			landlock.ROFiles("/proc/sys/kernel/ngroups_max").IgnoreIfMissing(),
-			landlock.ROFiles("/proc/sys/kernel/cap_last_cap").IgnoreIfMissing(),
-			landlock.ROFiles("/proc/sys/vm/overcommit_memory").IgnoreIfMissing(),
-			landlock.RWFiles("/dev/log").IgnoreIfMissing(),
-			landlock.RWFiles("/dev/null").IgnoreIfMissing(),
-			landlock.RWFiles("/dev/full").IgnoreIfMissing(),
-			landlock.RWFiles("/proc/self/fd").IgnoreIfMissing(),
-		))
-	default:
-		panic("invalid stage")
-	}
-}
-
-func extractPort(addr string) uint16 {
-	_, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		panic(fmt.Errorf("failed to extract port from %s: %w", addr, err))
-	}
-
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		panic(fmt.Errorf("failed to extract port from %s: %w", addr, err))
-	}
-
-	return uint16(port)
-}
-
-func lockNetwork(sections []wireproxyawg.RoutineSpawner, infoAddr *string) {
-	var rules []landlock.Rule
-	if infoAddr != nil && *infoAddr != "" {
-		rules = append(rules, landlock.BindTCP(extractPort(*infoAddr)))
-	}
-
-	for _, section := range sections {
-		switch section := section.(type) {
-		case *wireproxyawg.TCPServerTunnelConfig:
-			rules = append(rules, landlock.ConnectTCP(extractPort(section.Target)))
-		case *wireproxyawg.HTTPConfig:
-			rules = append(rules, landlock.BindTCP(extractPort(section.BindAddress)))
-		case *wireproxyawg.TCPClientTunnelConfig:
-			rules = append(rules, landlock.ConnectTCP(uint16(section.BindAddress.Port)))
-		case *wireproxyawg.Socks5Config:
-			rules = append(rules, landlock.BindTCP(extractPort(section.BindAddress)))
-		}
-	}
-
-	panicIfError(landlock.V4.BestEffort().RestrictNet(rules...))
-}
-
 func main() {
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGQUIT)
@@ -163,12 +56,14 @@ func main() {
 	}()
 
 	exePath := executablePath()
-	lock("boot")
+
+	sandbox := &wireproxyawg.Sandbox{}
+	sandbox.Lock("boot")
 
 	isDaemonProcess := len(os.Args) > 1 && os.Args[1] == daemonProcess
 	args := os.Args
 	if isDaemonProcess {
-		lock("boot-daemon")
+		sandbox.Lock("boot-daemon")
 		args = []string{args[0]}
 		args = append(args, os.Args[2:]...)
 	}
@@ -202,7 +97,7 @@ func main() {
 	}
 
 	if !*daemon {
-		lock("read-config")
+		sandbox.Lock("read-config")
 	}
 
 	conf, err := wireproxyawg.ParseConfig(*config)
@@ -215,7 +110,7 @@ func main() {
 		return
 	}
 
-	lockNetwork(conf.Routines, info)
+	sandbox.LockNetwork(conf.Routines, info)
 
 	if isDaemonProcess {
 		os.Stdout, _ = os.Open(os.DevNull)
@@ -242,7 +137,7 @@ func main() {
 		logLevel = device.LogLevelSilent
 	}
 
-	lock("ready")
+	sandbox.Lock("ready")
 
 	tun, err := wireproxyawg.StartWireguard(conf.Device, logLevel)
 	if err != nil {
