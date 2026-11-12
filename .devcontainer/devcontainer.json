@@ -1,0 +1,14 @@
+{
+  "name": "wireproxy-awg",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "vscode",
+  "forwardPorts": [64423, 64424, 64425],
+  "postCreateCommand": "git config --global --fixed-value --replace-all safe.directory \"$PWD\" \"$PWD\" && go mod download",
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.Go"]
+    }
+  }
+}

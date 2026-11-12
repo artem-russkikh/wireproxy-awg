@@ -1,6 +1,7 @@
 package wireproxy
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -145,10 +146,10 @@ func parseBase64KeyToHex(section *ini.Section, keyName string) (string, error) {
 func encodeBase64ToHex(key string) (string, error) {
 	decoded, err := base64.StdEncoding.DecodeString(key)
 	if err != nil {
-		return "", errors.New("invalid base64 string: " + key)
+		return "", errors.New("invalid base64 key")
 	}
 	if len(decoded) != 32 {
-		return "", errors.New("key should be 32 bytes: " + key)
+		return "", errors.New("key should be 32 bytes")
 	}
 	return hex.EncodeToString(decoded), nil
 }
@@ -537,43 +538,46 @@ func parseRoutinesConfig(
 	return nil
 }
 
-// ParseConfig takes the path of a configuration file and parses it into Configuration
-func ParseConfig(path string) (*Configuration, error) {
-	iniOpt := ini.LoadOptions{
+func configLoadOptions() ini.LoadOptions {
+	return ini.LoadOptions{
 		Insensitive:            true,
 		AllowShadows:           true,
 		AllowNonUniqueSections: true,
 	}
+}
 
-	cfg, err := ini.LoadSources(iniOpt, path)
+// ParseConfig loads a wireproxy configuration file.
+func ParseConfig(path string) (*Configuration, error) {
+	iniOpt := configLoadOptions()
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-
-	device := &DeviceConfig{
-		MTU: 1420,
+	if link := bytes.TrimSpace(bytes.TrimPrefix(data, []byte("\uFEFF"))); bytes.HasPrefix(link, []byte(amneziaScheme)) {
+		return ParseAmneziaConfig(string(link), "")
+	}
+	cfg, err := ini.LoadSources(iniOpt, data)
+	if err != nil {
+		return nil, err
 	}
 
 	resolve := &ResolveConfig{
 		ResolveStrategy: "auto",
 	}
 
-	root := cfg.Section("")
-	wgConf, err := root.GetKey("WGConfig")
 	wgCfg := cfg
-	if err == nil {
-		wgCfg, err = ini.LoadSources(iniOpt, wgConf.String())
+	if wgConf, keyErr := cfg.Section("").GetKey("WGConfig"); keyErr == nil {
+		if source := strings.TrimSpace(wgConf.Value()); strings.HasPrefix(source, amneziaScheme) {
+			wgCfg, err = loadAmneziaConfig(iniOpt, source)
+		} else {
+			wgCfg, err = ini.LoadSources(iniOpt, wgConf.String())
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	err = ParseInterface(wgCfg, device)
-	if err != nil {
-		return nil, err
-	}
-
-	err = ParsePeers(wgCfg, &device.Peers)
+	device, err := parseDeviceConfig(wgCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -622,4 +626,15 @@ func ParseConfig(path string) (*Configuration, error) {
 		Routines: routinesSpawners,
 		Resolve:  resolve,
 	}, nil
+}
+
+func parseDeviceConfig(cfg *ini.File) (*DeviceConfig, error) {
+	device := &DeviceConfig{MTU: 1420}
+	if err := ParseInterface(cfg, device); err != nil {
+		return nil, err
+	}
+	if err := ParsePeers(cfg, &device.Peers); err != nil {
+		return nil, err
+	}
+	return device, nil
 }
