@@ -325,6 +325,61 @@ AllowedIPs = 10.254.254.100/32
 # Note there is no Endpoint defined here.
 ```
 
+## Import an Amnezia VPN link
+
+Paste the exported `vpn://...` link into a file and run `wireproxy -c profile.conf`.
+This starts a SOCKS5 proxy on `127.0.0.1:1080`.
+
+To set your own listeners or tunnels, put the link in `WGConfig` at the top of
+your wireproxy configuration file:
+
+```ini
+WGConfig = vpn://...
+
+[Socks5]
+BindAddress = 127.0.0.1:25344
+```
+
+The link must contain an exported AmneziaWG or WireGuard client profile with an
+embedded configuration. Treat the link like a private key. Use
+`wireproxy -n -c profile.conf` to check the import without starting the proxy.
+
+### Docker without a configuration mount
+
+On Linux, build the image and pass the Amnezia link directly to Docker:
+
+```bash
+docker build -t wireproxy-awg:local .
+docker run --rm -e 'WIREPROXY_AMNEZIA_URL=vpn://YOUR_FULL_AMNEZIA_LINK' \
+  -e WIREPROXY_SOCKS5_BIND=0.0.0.0:1080 \
+  -p 127.0.0.1:1080:1080 wireproxy-awg:local
+```
+
+Replace the entire example URL with the link exported by Amnezia, including
+its `vpn://` prefix. To keep the link out of Bash history, enter it at a
+hidden prompt:
+
+```bash
+read -r -s -p 'Paste the full Amnezia link (vpn://...): ' WIREPROXY_AMNEZIA_URL
+printf '\n'
+export WIREPROXY_AMNEZIA_URL
+
+docker run --rm -e WIREPROXY_AMNEZIA_URL \
+  -e WIREPROXY_SOCKS5_BIND=0.0.0.0:1080 \
+  -p 127.0.0.1:1080:1080 wireproxy-awg:local
+```
+
+From another terminal, test the SOCKS5 proxy:
+
+```bash
+curl --socks5-hostname 127.0.0.1:1080 https://example.com/
+```
+
+With no bind override, SOCKS5 listens on `127.0.0.1:1080` inside the
+container. An explicit `--config` takes precedence over the environment.
+If no link is set, the image can still load a configuration mounted at
+`/etc/wireproxy/config`.
+
 # Health endpoint
 
 Wireproxy supports exposing a health endpoint for monitoring purposes.

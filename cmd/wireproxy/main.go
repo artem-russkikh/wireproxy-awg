@@ -26,6 +26,7 @@ const daemonProcess = "daemon-process"
 var default_config_paths = []string {
     "/etc/wireproxy/wireproxy.conf",
     os.Getenv("HOME")+"/.config/wireproxy.conf",
+    "/etc/wireproxy/config",
 }
 
 var version = "1.0.18-dev"
@@ -192,12 +193,12 @@ func main() {
 		return
 	}
 
-	if *config == "" {
+	amneziaURL := os.Getenv("WIREPROXY_AMNEZIA_URL")
+	if *config == "" && amneziaURL == "" {
         if path, config_exist := configFilePath(); config_exist {
             *config = path
         } else {
-            fmt.Println("configuration path is required")
-            return
+            log.Fatal("provide a configuration file or set WIREPROXY_AMNEZIA_URL")
         }
 	}
 
@@ -205,7 +206,12 @@ func main() {
 		lock("read-config")
 	}
 
-	conf, err := wireproxyawg.ParseConfig(*config)
+	var conf *wireproxyawg.Configuration
+	if *config != "" {
+		conf, err = wireproxyawg.ParseConfig(*config)
+	} else {
+		conf, err = wireproxyawg.ParseAmneziaConfig(amneziaURL, os.Getenv("WIREPROXY_SOCKS5_BIND"))
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
